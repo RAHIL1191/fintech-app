@@ -10,7 +10,8 @@ import {
     Animated,
     Easing,
     Dimensions,
-    Button
+    Button,
+    RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -218,7 +219,13 @@ const Accounts = ({ navigation }) => {
                 </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={loading} onRefresh={fetchAccounts} />
+                }
+            >
 
 
                 {/* Net Worth Nav */}

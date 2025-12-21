@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Wallet, ArrowUpRight, ArrowDownLeft, Plus, CreditCard, PieChart } from 'lucide-react-native';
 import PlaidLink from '../components/PlaidLink';
@@ -69,7 +69,12 @@ const Dashboard = () => {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" />
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl refreshing={loading} onRefresh={fetchDashboardData} />
+                }
+            >
                 {/* Header Section */}
                 <View style={styles.header}>
                     <View>
@@ -87,7 +92,7 @@ const Dashboard = () => {
                     {loading ? (
                         <ActivityIndicator color="#FFF" style={{ alignSelf: 'flex-start', marginVertical: 10 }} />
                     ) : (
-                        <Text style={styles.balanceAmount}>{accessToken ? balance.total : '$0.00'}</Text>
+                        <Text style={styles.balanceAmount}>{(balance.total !== '$0.00' || loading) ? balance.total : '$0.00'}</Text>
                     )}
                     <View style={styles.balanceActions}>
                         <View style={styles.statItem}>
