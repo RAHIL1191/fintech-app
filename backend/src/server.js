@@ -300,15 +300,31 @@ app.get('/api/accounts', async (req, res) => {
 
                 console.error(`Error fetching accounts for token (${item.access_token.substring(0, 10)}...):`, errorMsg);
 
-                // Try to get cached accounts
-                if (item.item_id && item.item_id !== 'legacy') {
-                    const cached = await db.getCachedAccountsByItem(item.item_id);
-                    if (cached.length > 0) {
-                        return cached.map(acc => ({
-                            ...acc,
-                            error_code: errorCode // Inject error status
-                        }));
-                    }
+                // --- CRITICAL FIX FOR NEW DEPLOYMENTS ---
+                // If the fetch fails and we have no cache (fresh database), 
+                // return a "Placeholder" account so the user can see the bank and trigger REPAIR.
+                const cached = item.item_id && item.item_id !== 'legacy'
+                    ? await db.getCachedAccountsByItem(item.item_id)
+                    : [];
+
+                if (cached.length > 0) {
+                    return cached.map(acc => ({
+                        ...acc,
+                        error_code: errorCode // Inject error status
+                    }));
+                } else if (item.institution_name) {
+                    // Return a fake "Synthetic" account representing the broken item
+                    return [{
+                        account_id: `error_${item.item_id}`,
+                        name: `Connection Required: ${item.institution_name}`,
+                        mask: '!!!!',
+                        type: 'depository',
+                        subtype: 'checking',
+                        balances: { current: 0, available: 0 },
+                        institution_name: item.institution_name,
+                        item_id: item.item_id,
+                        error_code: errorCode // Trigger the Red Alert in UI
+                    }];
                 }
                 return [];
             }
