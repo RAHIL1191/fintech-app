@@ -2,6 +2,7 @@ services:
   - type: web
     name: fintech-backend
     env: node
+    rootDir: backend
     buildCommand: npm install
     startCommand: npm start
     plan: free # Can be changed to starter for more power
