@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // 1. Change this to your Render URL after creating the service
 // Example: https://fintech-api.onrender.com
-const PRODUCTION_URL = 'https://YOUR_BACKEND_URL.onrender.com';
+const PRODUCTION_URL = 'https://fintech-backend-psg5.onrender.com';
 
 // 2. Development URL (Local)
 const LOCAL_URL = 'http://192.168.2.19:8000';
