@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+.expo/
+dist/
+
+# Env / Secrets
+.env
+.env.local
+
+# Database
+*.db
+*.db-journal
+backend/data.db
+
+# Logs
+backend.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System Files
+.DS_Store
+Thumbs.db

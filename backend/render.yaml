@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: fintech-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free # Can be changed to starter for more power
+    envVars:
+      - key: NODE_VERSION
+        value: 18.x
+      - key: PLAID_ENV
+        sync: false
+      - key: PLAID_CLIENT_ID
+        sync: false
+      - key: PLAID_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: PORT
+        value: 10000
