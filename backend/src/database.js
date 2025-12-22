@@ -86,7 +86,7 @@ class DatabaseManager {
             )`,
             // Merchant Metadata
             `CREATE TABLE IF NOT EXISTS merchant_metadata (
-                name TEXT PRIMARY KEY,
+                merchant_name TEXT PRIMARY KEY,
                 category TEXT,
                 logo_url TEXT,
                 is_favorite INTEGER DEFAULT 0,
@@ -263,9 +263,9 @@ class DatabaseManager {
         let sql;
         if (this.isPostgres) {
             sql = `
-                INSERT INTO merchant_metadata (name, category, logo_url, is_favorite, updated_at)
+                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, updated_at)
                 VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-                ON CONFLICT(name) DO UPDATE SET
+                ON CONFLICT(merchant_name) DO UPDATE SET
                     category = COALESCE(EXCLUDED.category, merchant_metadata.category),
                     logo_url = COALESCE(EXCLUDED.logo_url, merchant_metadata.logo_url),
                     is_favorite = COALESCE(EXCLUDED.is_favorite, merchant_metadata.is_favorite),
@@ -273,9 +273,9 @@ class DatabaseManager {
             `;
         } else {
             sql = `
-                INSERT INTO merchant_metadata (name, category, logo_url, is_favorite, updated_at)
+                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, updated_at)
                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(name) DO UPDATE SET
+                ON CONFLICT(merchant_name) DO UPDATE SET
                     category = COALESCE(excluded.category, merchant_metadata.category),
                     logo_url = COALESCE(excluded.logo_url, merchant_metadata.logo_url),
                     is_favorite = COALESCE(excluded.is_favorite, merchant_metadata.is_favorite),
@@ -349,10 +349,10 @@ class DatabaseManager {
         const rows = await this.all('SELECT * FROM merchant_metadata');
         return rows.reduce((map, row) => {
             // Store by name as provided in DB
-            map[row.name] = row;
+            map[row.merchant_name] = row;
             // Also store by cleaned name if different
-            const cleaned = cleanMerchantName(row.name);
-            if (cleaned && cleaned !== row.name) {
+            const cleaned = cleanMerchantName(row.merchant_name);
+            if (cleaned && cleaned !== row.merchant_name) {
                 map[cleaned] = row;
             }
             return map;

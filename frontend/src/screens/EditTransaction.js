@@ -414,18 +414,18 @@ const EditTransaction = ({ navigation, route }) => {
             {/* Account Selection Modal */}
             <Modal
                 visible={showAccountModal}
-                transparent={false}
+                presentationStyle="fullScreen"
                 animationType="slide"
                 onRequestClose={() => setShowAccountModal(false)}
             >
                 <SafeAreaView style={{ flex: 1, backgroundColor: '#0F172A' }}>
-                    <View style={[styles.modalContent, { flex: 1, borderRadius: 0, paddingBottom: insets.bottom }]}>
+                    <View style={[styles.modalContent, { flex: 1, borderRadius: 0, paddingBottom: 0 }]}>
                         <View style={styles.modalHeader}>
-                            <TouchableOpacity onPress={() => setShowAccountModal(false)} style={styles.modalCloseButton}>
-                                <X size={24} color="#64748B" />
+                            <TouchableOpacity onPress={() => setShowAccountModal(false)} style={styles.iconButton}>
+                                <ArrowLeft size={24} color="#FFF" />
                             </TouchableOpacity>
                             <Text style={styles.modalTitle}>Select Account</Text>
-                            <View style={{ width: 24 }} />
+                            <View style={{ width: 40 }} />
                         </View>
 
                         <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -468,18 +468,18 @@ const EditTransaction = ({ navigation, route }) => {
             {/* Merchant Selection Modal */}
             <Modal
                 visible={showMerchantModal}
-                transparent={true}
+                presentationStyle="fullScreen"
                 animationType="slide"
                 onRequestClose={() => setShowMerchantModal(false)}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { height: '85%', paddingBottom: Math.max(24, insets.bottom + 16) }]}>
+                <SafeAreaView style={{ flex: 1, backgroundColor: '#0F172A' }}>
+                    <View style={[styles.modalContent, { flex: 1, borderRadius: 0, paddingBottom: 0 }]}>
                         <View style={styles.modalHeader}>
-                            <TouchableOpacity onPress={() => setShowMerchantModal(false)} style={styles.modalCloseButton}>
-                                <X size={24} color="#64748B" />
+                            <TouchableOpacity onPress={() => setShowMerchantModal(false)} style={styles.iconButton}>
+                                <ArrowLeft size={24} color="#FFF" />
                             </TouchableOpacity>
                             <Text style={styles.modalTitle}>Select Merchant</Text>
-                            <View style={{ width: 24 }} />
+                            <View style={{ width: 40 }} />
                         </View>
 
                         {description ? (
@@ -556,7 +556,7 @@ const EditTransaction = ({ navigation, route }) => {
                             )}
                         </ScrollView>
                     </View>
-                </View>
+                </SafeAreaView>
             </Modal>
 
             {/* Date Selection Modal */}
