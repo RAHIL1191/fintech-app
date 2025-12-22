@@ -211,22 +211,31 @@ app.get('/api/transactions', async (req, res) => {
             allTransactions = await db.getCachedTransactions(itemIds);
         }
 
-        // 3. Merge with local overrides (metadata)
+        // 3. Merge with local overrides (metadata) and Merchant Rules
         const metadata = await db.getTransactionMetadataMap();
+        const merchantRules = await db.getMerchantMetadataMap();
+
         const mergedTransactions = allTransactions.map(t => {
-            const override = metadata[t.transaction_id] || {};
-            // Format for Frontend
+            const txOverride = metadata[t.transaction_id] || {};
+            // Use merchant_name if available, fallback to name for rule matching
+            const merchantName = t.merchant_name || t.name;
+            const merchantOverride = merchantRules[merchantName] || {};
+
+            // Priority: Transaction Metadata > Merchant Rule > Plaid Default
+            const finalCategory = txOverride.category || merchantOverride.category || (t.category && t.category.length > 0 ? t.category[0] : 'General');
+
             return {
                 ...t,
                 personal_finance_category: {
-                    primary: override.category || (t.category ? t.category[0] : 'General')
+                    primary: finalCategory
                 },
-                name: override.merchant_name || t.name,
-                account_id: override.account_id || t.account_id,
-                date: override.date || t.date,
-                note: override.note || t.note,
-                recurring_frequency: override.recurring_frequency || t.recurring_frequency,
-                is_transfer: override.is_transfer !== undefined ? !!override.is_transfer : false
+                category: [finalCategory], // Ensure both styles exist for the UI
+                name: txOverride.merchant_name || t.name,
+                account_id: txOverride.account_id || t.account_id,
+                date: txOverride.date || t.date,
+                note: txOverride.note || t.note,
+                recurring_frequency: txOverride.recurring_frequency || t.recurring_frequency,
+                is_transfer: txOverride.is_transfer !== undefined ? !!txOverride.is_transfer : (t.is_transfer || false)
             };
         });
 

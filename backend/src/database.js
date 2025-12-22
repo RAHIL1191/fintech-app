@@ -253,9 +253,9 @@ class DatabaseManager {
                 INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, updated_at)
                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(merchant_name) DO UPDATE SET
-                    category = EXCLUDED.category,
-                    logo_url = EXCLUDED.logo_url,
-                    is_favorite = EXCLUDED.is_favorite,
+                    category = COALESCE(EXCLUDED.category, merchant_metadata.category),
+                    logo_url = COALESCE(EXCLUDED.logo_url, merchant_metadata.logo_url),
+                    is_favorite = COALESCE(EXCLUDED.is_favorite, merchant_metadata.is_favorite),
                     updated_at = CURRENT_TIMESTAMP
             `;
         } else {
@@ -277,6 +277,12 @@ class DatabaseManager {
 
     async setTransactionMetadata(id, data) {
         const { category, merchant_name, account_id, date, note, recurring_frequency, is_transfer } = data;
+
+        // Dynamic Categorization: If a category is set for a transaction, 
+        // also set it as the default for this merchant name globally.
+        if (merchant_name && category) {
+            await this.setMerchantMetadata(merchant_name, { category });
+        }
 
         let sql;
         if (this.isPostgres) {
@@ -320,6 +326,14 @@ class DatabaseManager {
         const rows = await this.all('SELECT * FROM transaction_metadata');
         return rows.reduce((map, row) => {
             map[row.transaction_id] = row;
+            return map;
+        }, {});
+    }
+
+    async getMerchantMetadataMap() {
+        const rows = await this.all('SELECT * FROM merchant_metadata');
+        return rows.reduce((map, row) => {
+            map[row.merchant_name] = row;
             return map;
         }, {});
     }
