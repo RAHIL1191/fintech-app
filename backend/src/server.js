@@ -4,7 +4,7 @@ const cors = require('cors');
 const { Configuration, PlaidApi, PlaidEnvironments } = require('plaid');
 const path = require('path');
 const fs = require('fs');
-const db = require('./database');
+const { manager: db, cleanMerchantName } = require('./database');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const logToFile = (msg) => {
@@ -219,7 +219,8 @@ app.get('/api/transactions', async (req, res) => {
             const txOverride = metadata[t.transaction_id] || {};
             // Use merchant_name if available, fallback to name for rule matching
             const merchantName = t.merchant_name || t.name;
-            const merchantOverride = merchantRules[merchantName] || {};
+            const cleanedName = cleanMerchantName(t.name);
+            const merchantOverride = merchantRules[merchantName] || merchantRules[cleanedName] || {};
 
             // Priority: Transaction Metadata > Merchant Rule > Plaid Detailed Category > Plaid Primary Category > Plaid Legacy Category
             const pfDetailed = t.personal_finance_category?.detailed?.replace(/_/g, ' ')

@@ -4,6 +4,15 @@ const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
 
+function cleanMerchantName(name) {
+    if (!name) return '';
+    return name
+        .toUpperCase()
+        .replace(/[0-9#*-]/g, '') // Remove numbers, hashtags, stars, dashes
+        .replace(/\s+/g, ' ')      // Normalize whitespace
+        .trim();
+}
+
 const DB_PATH = path.join(__dirname, '../data.db');
 
 class DatabaseManager {
@@ -77,7 +86,7 @@ class DatabaseManager {
             )`,
             // Merchant Metadata
             `CREATE TABLE IF NOT EXISTS merchant_metadata (
-                merchant_name TEXT PRIMARY KEY,
+                name TEXT PRIMARY KEY,
                 category TEXT,
                 logo_url TEXT,
                 is_favorite INTEGER DEFAULT 0,
@@ -246,14 +255,17 @@ class DatabaseManager {
         await this.run(sql, params);
     }
 
-    async setMerchantMetadata(id, data) {
+    async setMerchantMetadata(name, data) {
+        if (!this.pool && !this.db) await this.init();
         const { category, logo_url, is_favorite } = data;
+        const cleanedName = cleanMerchantName(name);
+
         let sql;
         if (this.isPostgres) {
             sql = `
-                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(merchant_name) DO UPDATE SET
+                INSERT INTO merchant_metadata (name, category, logo_url, is_favorite, updated_at)
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                ON CONFLICT(name) DO UPDATE SET
                     category = COALESCE(EXCLUDED.category, merchant_metadata.category),
                     logo_url = COALESCE(EXCLUDED.logo_url, merchant_metadata.logo_url),
                     is_favorite = COALESCE(EXCLUDED.is_favorite, merchant_metadata.is_favorite),
@@ -261,19 +273,20 @@ class DatabaseManager {
             `;
         } else {
             sql = `
-                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, updated_at)
+                INSERT INTO merchant_metadata (name, category, logo_url, is_favorite, updated_at)
                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(merchant_name) DO UPDATE SET
-                    category = COALESCE(?, category),
-                    logo_url = COALESCE(?, logo_url),
-                    is_favorite = COALESCE(?, is_favorite),
+                ON CONFLICT(name) DO UPDATE SET
+                    category = COALESCE(excluded.category, merchant_metadata.category),
+                    logo_url = COALESCE(excluded.logo_url, merchant_metadata.logo_url),
+                    is_favorite = COALESCE(excluded.is_favorite, merchant_metadata.is_favorite),
                     updated_at = CURRENT_TIMESTAMP
             `;
         }
-        const params = this.isPostgres
-            ? [id, category, logo_url, is_favorite]
-            : [id, category, logo_url, is_favorite, category, logo_url, is_favorite];
-        await this.run(sql, params);
+        // Save for BOTH exact name AND cleaned name to be safe
+        await this.run(sql, [name, category, logo_url, is_favorite]);
+        if (cleanedName && cleanedName !== name.toUpperCase()) {
+            await this.run(sql, [cleanedName, category, logo_url, is_favorite]);
+        }
     }
 
     async setTransactionMetadata(id, data) {
@@ -340,7 +353,57 @@ class DatabaseManager {
     }
 
     async getCategories() {
-        return this.all('SELECT * FROM categories ORDER BY name ASC');
+        if (!this.pool && !this.db) await this.init();
+
+        // Helper to normalize names for comparison
+        const normalize = (n) => n.toLowerCase().replace(/[^a-z0-9]/g, '').replace('and', '');
+
+        // 1. Get seeded/hardcoded categories
+        const baseCategories = await this.all('SELECT * FROM categories ORDER BY name ASC');
+        const normalizedSeen = new Map();
+
+        baseCategories.forEach(c => {
+            normalizedSeen.set(normalize(c.name), c.name);
+        });
+
+        // 2. Get unique categories currently in use in transactions
+        const txCategoriesSql = this.isPostgres
+            ? "SELECT DISTINCT (personal_finance_category::json->>'primary') as name FROM cached_transactions WHERE personal_finance_category IS NOT NULL"
+            : "SELECT DISTINCT json_extract(personal_finance_category, '$.primary') as name FROM cached_transactions WHERE personal_finance_category IS NOT NULL";
+
+        try {
+            const txCategories = await this.all(txCategoriesSql);
+            const merged = [...baseCategories];
+
+            for (const row of txCategories) {
+                if (!row.name) continue;
+
+                // Beautify name if it looks like a Plaid slug
+                let displayName = row.name;
+                if (displayName.includes('_')) {
+                    displayName = displayName.replace(/_/g, ' ')
+                        .toLowerCase()
+                        .replace(/\b\w/g, l => l.toUpperCase());
+                }
+
+                const normName = normalize(displayName);
+                if (!normalizedSeen.has(normName)) {
+                    merged.push({
+                        id: 'dynamic_' + row.name,
+                        name: displayName,
+                        original_name: row.name,
+                        icon: 'tag',
+                        color: '#64748B'
+                    });
+                    normalizedSeen.set(normName, displayName);
+                }
+            }
+
+            return merged.sort((a, b) => a.name.localeCompare(b.name));
+        } catch (err) {
+            console.error('Error fetching dynamic categories:', err);
+            return baseCategories;
+        }
     }
 
     async addCategory(name, color = '#94A3B8', icon = 'tag') {
@@ -425,12 +488,28 @@ class DatabaseManager {
     async getUniqueMerchants() {
         if (!this.pool && !this.db) await this.init();
         const rows = await this.all(`
-            SELECT DISTINCT merchant_name 
-            FROM transaction_metadata 
-            WHERE merchant_name IS NOT NULL AND merchant_name != ''
-            ORDER BY merchant_name ASC
+            SELECT DISTINCT merchant_name as name FROM transaction_metadata WHERE merchant_name IS NOT NULL
+            UNION
+            SELECT DISTINCT name FROM cached_transactions WHERE merchant_name IS NULL
+            ORDER BY name ASC
         `);
-        return rows.map(r => r.merchant_name);
+
+        // Use a Set to deduplicate cleaned names
+        const seen = new Set();
+        const result = [];
+
+        for (const row of rows) {
+            const cleaned = cleanMerchantName(row.name);
+            if (cleaned && !seen.has(cleaned)) {
+                result.push(row.name); // Keep one representative name
+                seen.add(cleaned);
+            } else if (!cleaned && row.name && !seen.has(row.name.toUpperCase())) {
+                result.push(row.name);
+                seen.add(row.name.toUpperCase());
+            }
+        }
+
+        return result.sort((a, b) => a.localeCompare(b));
     }
 
     async getCachedAccountsByItem(itemId) {
@@ -532,4 +611,7 @@ class DatabaseManager {
     }
 }
 
-module.exports = new DatabaseManager();
+module.exports = {
+    manager: new DatabaseManager(),
+    cleanMerchantName
+};
