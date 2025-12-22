@@ -121,6 +121,7 @@ class DatabaseManager {
                 name TEXT,
                 merchant_name TEXT,
                 category TEXT,
+                personal_finance_category TEXT,
                 pending INTEGER,
                 iso_currency_code TEXT,
                 item_id TEXT,
@@ -458,24 +459,28 @@ class DatabaseManager {
                 sql = `
                     INSERT INTO cached_transactions (
                         transaction_id, account_id, amount, date, name, merchant_name, 
-                        category, pending, iso_currency_code, item_id, updated_at
+                        category, personal_finance_category, pending, iso_currency_code, item_id, updated_at
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
                     ON CONFLICT(transaction_id) DO UPDATE SET
                         amount = EXCLUDED.amount,
                         pending = EXCLUDED.pending,
+                        category = EXCLUDED.category,
+                        personal_finance_category = EXCLUDED.personal_finance_category,
                         updated_at = CURRENT_TIMESTAMP
                 `;
             } else {
                 sql = `
                     INSERT INTO cached_transactions (
                         transaction_id, account_id, amount, date, name, merchant_name, 
-                        category, pending, iso_currency_code, item_id, updated_at
+                        category, personal_finance_category, pending, iso_currency_code, item_id, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(transaction_id) DO UPDATE SET
                         amount = excluded.amount,
                         pending = excluded.pending,
+                        category = excluded.category,
+                        personal_finance_category = excluded.personal_finance_category,
                         updated_at = CURRENT_TIMESTAMP
                 `;
             }
@@ -487,6 +492,7 @@ class DatabaseManager {
                 tx.name,
                 tx.merchant_name,
                 tx.category ? tx.category.join(',') : null,
+                tx.personal_finance_category ? JSON.stringify(tx.personal_finance_category) : null,
                 tx.pending ? 1 : 0,
                 tx.iso_currency_code,
                 itemId
@@ -518,6 +524,7 @@ class DatabaseManager {
             name: row.name,
             merchant_name: row.merchant_name,
             category: row.category ? row.category.split(',') : [],
+            personal_finance_category: row.personal_finance_category ? JSON.parse(row.personal_finance_category) : null,
             pending: row.pending === 1,
             iso_currency_code: row.iso_currency_code,
             item_id: row.item_id

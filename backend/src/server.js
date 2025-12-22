@@ -221,15 +221,16 @@ app.get('/api/transactions', async (req, res) => {
             const merchantName = t.merchant_name || t.name;
             const merchantOverride = merchantRules[merchantName] || {};
 
-            // Priority: Transaction Metadata > Merchant Rule > Plaid Default
-            const finalCategory = txOverride.category || merchantOverride.category || (t.category && t.category.length > 0 ? t.category[0] : 'General');
+            // Priority: Transaction Metadata > Merchant Rule > Plaid Personal Finance Category > Plaid Legacy Category
+            const pfCategory = t.personal_finance_category?.primary || (t.category && t.category.length > 0 ? t.category[0] : 'General');
+            const finalCategory = txOverride.category || merchantOverride.category || pfCategory;
 
             return {
                 ...t,
                 personal_finance_category: {
                     primary: finalCategory
                 },
-                category: [finalCategory], // Ensure both styles exist for the UI
+                category: [finalCategory],
                 name: txOverride.merchant_name || t.name,
                 account_id: txOverride.account_id || t.account_id,
                 date: txOverride.date || t.date,
