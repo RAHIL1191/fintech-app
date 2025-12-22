@@ -5,8 +5,8 @@ require('dotenv').config();
 const run = async () => {
     // --- ADD YOUR TOKENS HERE ---
     const TOKENS_TO_ADD = [
-        { token: 'access-production-af54a1e8-d986-4f92-9739-39fdd50bf166', name: 'Tangerine' },
-        { token: 'access-production-9f4f5df6-b441-4278-95d6-3924af70fc40', name: 'BMO' },
+        { token: 'access-production-YOUR_TANGERINE_TOKEN', name: 'Tangerine' },
+        { token: 'access-production-YOUR_BMO_TOKEN', name: 'BMO' },
     ];
     // ----------------------------
 
