@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl, ScrollView, Alert, Dimensions, useWindowDimensions } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Menu, Search, RefreshCw, Filter } from 'lucide-react-native';
@@ -18,7 +18,8 @@ const Transactions = ({ navigation }) => {
     const [accessToken, setAccessToken] = useState(null);
     const [selectedTab, setSelectedTab] = useState('CATEGORIES');
     const TABS = ['CATEGORIES', 'MERCHANTS', 'DAILY', 'MONTHLY', 'RECURRING', 'TRANSFERS'];
-
+    const { width } = useWindowDimensions();
+    const scrollRef = useRef(null);
     const isFocused = useIsFocused();
 
     useEffect(() => {
@@ -46,6 +47,19 @@ const Transactions = ({ navigation }) => {
         }
     };
 
+    const handleTabPress = (index) => {
+        setSelectedTab(TABS[index]);
+        scrollRef.current?.scrollTo({ x: index * width, animated: true });
+    };
+
+    const handleScroll = (event) => {
+        const x = event.nativeEvent.contentOffset.x;
+        const index = Math.round(x / width);
+        if (TABS[index] && TABS[index] !== selectedTab) {
+            setSelectedTab(TABS[index]);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Top Toolbar */}
@@ -68,36 +82,52 @@ const Transactions = ({ navigation }) => {
 
             {/* Sub-Tabs */}
             <View style={styles.tabsContainer}>
-                {TABS.map((tab) => (
-                    <TouchableOpacity
-                        key={tab}
-                        style={[styles.tabItem, selectedTab === tab && styles.tabItemActive]}
-                        onPress={() => setSelectedTab(tab)}
-                    >
-                        <Text style={[styles.tabText, selectedTab === tab && styles.tabTextActive]}>
-                            {tab}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {TABS.map((tab, idx) => (
+                        <TouchableOpacity
+                            key={tab}
+                            style={[styles.tabItem, selectedTab === tab && styles.tabItemActive]}
+                            onPress={() => handleTabPress(idx)}
+                        >
+                            <Text style={[styles.tabText, selectedTab === tab && styles.tabTextActive]}>
+                                {tab}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
             </View>
 
             {/* Main Content */}
             <View style={styles.content}>
-                {loading ? (
+                {loading && transactions.length === 0 ? (
                     <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 50 }} />
                 ) : (
                     <ScrollView
-                        style={{ flex: 1 }}
-                        refreshControl={
-                            <RefreshControl refreshing={loading} onRefresh={() => fetchTransactions(true)} tintColor="#0EA5E9" />
-                        }
+                        ref={scrollRef}
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        onMomentumScrollEnd={handleScroll}
+                        scrollEventThrottle={16}
                     >
-                        {selectedTab === 'CATEGORIES' && <CategoriesTab key={`cat-${transactions.length}`} transactions={transactions} navigation={navigation} />}
-                        {selectedTab === 'MERCHANTS' && <MerchantsTab key={`mer-${transactions.length}`} transactions={transactions} navigation={navigation} />}
-                        {selectedTab === 'DAILY' && <DailyTab key={`dai-${transactions.length}`} transactions={transactions} navigation={navigation} />}
-                        {selectedTab === 'MONTHLY' && <MonthlyTab key={`mon-${transactions.length}`} transactions={transactions} navigation={navigation} />}
-                        {selectedTab === 'RECURRING' && <RecurringTab key={`rec-${transactions.length}`} transactions={transactions} navigation={navigation} />}
-                        {selectedTab === 'TRANSFERS' && <TransfersTab key={`tra-${transactions.length}`} transactions={transactions} navigation={navigation} />}
+                        <View style={{ width }}>
+                            <CategoriesTab transactions={transactions} navigation={navigation} onRefresh={() => fetchTransactions(true)} refreshing={loading} />
+                        </View>
+                        <View style={{ width }}>
+                            <MerchantsTab transactions={transactions} navigation={navigation} onRefresh={() => fetchTransactions(true)} refreshing={loading} />
+                        </View>
+                        <View style={{ width }}>
+                            <DailyTab transactions={transactions} navigation={navigation} onRefresh={() => fetchTransactions(true)} refreshing={loading} />
+                        </View>
+                        <View style={{ width }}>
+                            <MonthlyTab transactions={transactions} navigation={navigation} onRefresh={() => fetchTransactions(true)} refreshing={loading} />
+                        </View>
+                        <View style={{ width }}>
+                            <RecurringTab transactions={transactions} navigation={navigation} onRefresh={() => fetchTransactions(true)} refreshing={loading} />
+                        </View>
+                        <View style={{ width }}>
+                            <TransfersTab transactions={transactions} navigation={navigation} onRefresh={() => fetchTransactions(true)} refreshing={loading} />
+                        </View>
                     </ScrollView>
                 )}
             </View>

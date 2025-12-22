@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Repeat } from 'lucide-react-native';
 
-const TransfersTab = ({ transactions = [], navigation }) => {
+const TransfersTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
     const transfers = transactions.filter(t => t.is_transfer === true || t.is_transfer === 1);
 
     // Group transactions by Date
@@ -20,7 +20,13 @@ const TransfersTab = ({ transactions = [], navigation }) => {
     const totalTransfers = transactions.filter(t => t.is_transfer).length;
 
     return (
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView
+            style={styles.container}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+                onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" /> : null
+            }
+        >
             <View style={styles.header}>
                 <Text style={styles.headerText}>
                     {totalTransfers} Transfers Found

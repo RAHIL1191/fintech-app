@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Repeat, ChevronRight, Calendar, ArrowUpRight, ArrowDownLeft, ChevronDown } from 'lucide-react-native';
 
-const RecurringTab = ({ transactions = [], navigation }) => {
+const RecurringTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
     const [expandedSections, setExpandedSections] = useState({});
 
     const toggleSection = (freq) => {
@@ -42,7 +42,13 @@ const RecurringTab = ({ transactions = [], navigation }) => {
     }, [transactions]);
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+                onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" /> : null
+            }
+        >
             {recurringData.map(({ freq, items, total }) => {
                 const isExpanded = !!expandedSections[freq];
                 return (

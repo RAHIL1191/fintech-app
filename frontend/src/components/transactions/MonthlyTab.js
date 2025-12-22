@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 
-const MonthlyTab = ({ transactions = [], navigation }) => {
+const MonthlyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
     const [filter, setFilter] = useState('All'); // All | Expenses | Income
     const FILTERS = ['All', 'Expenses', 'Income'];
 
@@ -91,7 +91,12 @@ const MonthlyTab = ({ transactions = [], navigation }) => {
             </View>
 
             {/* Monthly List */}
-            <ScrollView contentContainerStyle={styles.listContent}>
+            <ScrollView
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                    onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" /> : null
+                }
+            >
                 {monthlyData.map((month) => (
                     <TouchableOpacity
                         key={month.name}

@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { ShoppingBag, Coffee, Home, CreditCard, DollarSign, RefreshCw, ArrowRightLeft, Plus } from 'lucide-react-native';
 
-const DailyTab = ({ transactions = [], navigation }) => {
+const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
     const [filter, setFilter] = useState('All'); // All | Expenses | Income | Transfers
     const [isFabExpanded, setIsFabExpanded] = useState(false);
 
@@ -96,7 +96,12 @@ const DailyTab = ({ transactions = [], navigation }) => {
             </View>
 
             {/* Transactions List */}
-            <ScrollView contentContainerStyle={styles.listContent}>
+            <ScrollView
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                    onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" /> : null
+                }
+            >
                 {groupedData.map((group) => (
                     <View key={group.date} style={styles.dateGroup}>
                         {/* Header */}

@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { ChevronLeft, ChevronRight, MoreHorizontal, Store, ChevronDown } from 'lucide-react-native';
 import DonutChart from '../DonutChart';
 
-const MerchantsTab = ({ transactions = [], navigation }) => {
+const MerchantsTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [typeFilter, setTypeFilter] = useState('Expenses'); // Expenses | Income
     const [expandedMerchant, setExpandedMerchant] = useState(null); // Track absolute merchant name
@@ -82,7 +82,13 @@ const MerchantsTab = ({ transactions = [], navigation }) => {
     };
 
     return (
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView
+            style={styles.container}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+                onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10B981" /> : null
+            }
+        >
             {/* Type Toggle & Date Nav */}
             <View style={styles.controlsRow}>
                 <View style={styles.toggleContainer}>
