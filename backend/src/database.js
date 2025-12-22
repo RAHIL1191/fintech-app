@@ -205,6 +205,76 @@ class DatabaseManager {
         }
     }
 
+    async setMetadata(type, id, data) {
+        if (type === 'transaction') {
+            return this.setTransactionMetadata(id, data);
+        } else if (type === 'account') {
+            return this.setAccountMetadata(id, data);
+        } else if (type === 'merchant') {
+            return this.setMerchantMetadata(id, data);
+        } else {
+            throw new Error(`Unsupported metadata type: ${type}`);
+        }
+    }
+
+    async setAccountMetadata(id, data) {
+        const { custom_name, is_hidden } = data;
+        let sql;
+        if (this.isPostgres) {
+            sql = `
+                INSERT INTO account_metadata (account_id, custom_name, is_hidden, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(account_id) DO UPDATE SET
+                    custom_name = EXCLUDED.custom_name,
+                    is_hidden = EXCLUDED.is_hidden,
+                    updated_at = CURRENT_TIMESTAMP
+            `;
+        } else {
+            sql = `
+                INSERT INTO account_metadata (account_id, custom_name, is_hidden, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(account_id) DO UPDATE SET
+                    custom_name = COALESCE(?, custom_name),
+                    is_hidden = COALESCE(?, is_hidden),
+                    updated_at = CURRENT_TIMESTAMP
+            `;
+        }
+        const params = this.isPostgres
+            ? [id, custom_name, is_hidden]
+            : [id, custom_name, is_hidden, custom_name, is_hidden];
+        await this.run(sql, params);
+    }
+
+    async setMerchantMetadata(id, data) {
+        const { category, logo_url, is_favorite } = data;
+        let sql;
+        if (this.isPostgres) {
+            sql = `
+                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(merchant_name) DO UPDATE SET
+                    category = EXCLUDED.category,
+                    logo_url = EXCLUDED.logo_url,
+                    is_favorite = EXCLUDED.is_favorite,
+                    updated_at = CURRENT_TIMESTAMP
+            `;
+        } else {
+            sql = `
+                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(merchant_name) DO UPDATE SET
+                    category = COALESCE(?, category),
+                    logo_url = COALESCE(?, logo_url),
+                    is_favorite = COALESCE(?, is_favorite),
+                    updated_at = CURRENT_TIMESTAMP
+            `;
+        }
+        const params = this.isPostgres
+            ? [id, category, logo_url, is_favorite]
+            : [id, category, logo_url, is_favorite, category, logo_url, is_favorite];
+        await this.run(sql, params);
+    }
+
     async setTransactionMetadata(id, data) {
         const { category, merchant_name, account_id, date, note, recurring_frequency, is_transfer } = data;
 
