@@ -6,6 +6,7 @@ dist/
 # Env / Secrets
 .env
 .env.local
+local.properties
 
 # Database
 *.db
@@ -25,3 +26,9 @@ Thumbs.db
 # Native Projects (managed by Expo Prebuild)
 frontend/android/
 frontend/ios/
+
+
+#For Local build
+npx expo run:android --variant release (or ./gradlew assembleRelease inside frontend/android if you prefer raw Gradle)
+
+The current app-release.apk is waiting for you in frontend/android/app/build/outputs/apk/release/
