@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, Modal } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     ArrowLeft, Check, Calendar, Tag, CreditCard,
     AlignLeft, DollarSign, Repeat, ChevronRight,
@@ -12,6 +12,7 @@ import CustomDatePicker from '../components/CustomDatePicker';
 
 const EditTransaction = ({ navigation, route }) => {
     const { transaction, mode = 'edit', type: paramType } = route.params || {};
+    const insets = useSafeAreaInsets();
 
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
@@ -301,7 +302,7 @@ const EditTransaction = ({ navigation, route }) => {
                     activeOpacity={1}
                     onPress={() => setShowFrequencyModal(false)}
                 >
-                    <View style={styles.modalContent}>
+                    <View style={[styles.modalContent, { paddingBottom: Math.max(24, insets.bottom + 16) }]}>
                         <Text style={styles.modalTitle}>Select Frequency</Text>
                         {FREQUENCIES.map((freq) => (
                             <TouchableOpacity
@@ -334,7 +335,7 @@ const EditTransaction = ({ navigation, route }) => {
                 onRequestClose={() => setShowCategoryModal(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { height: '80%' }]}>
+                    <View style={[styles.modalContent, { height: '85%', paddingBottom: Math.max(24, insets.bottom + 16) }]}>
                         <View style={styles.modalHeader}>
                             <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={styles.modalCloseButton}>
                                 <X size={24} color="#64748B" />
@@ -363,7 +364,7 @@ const EditTransaction = ({ navigation, route }) => {
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                         />
-                        <ScrollView>
+                        <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
                             {filteredCategories.map((cat) => (
                                 <TouchableOpacity
                                     key={cat.id}
@@ -418,7 +419,7 @@ const EditTransaction = ({ navigation, route }) => {
                 onRequestClose={() => setShowAccountModal(false)}
             >
                 <SafeAreaView style={{ flex: 1, backgroundColor: '#0F172A' }}>
-                    <View style={[styles.modalContent, { flex: 1, borderRadius: 0, paddingBottom: 0 }]}>
+                    <View style={[styles.modalContent, { flex: 1, borderRadius: 0, paddingBottom: insets.bottom }]}>
                         <View style={styles.modalHeader}>
                             <TouchableOpacity onPress={() => setShowAccountModal(false)} style={styles.modalCloseButton}>
                                 <X size={24} color="#64748B" />
@@ -427,7 +428,7 @@ const EditTransaction = ({ navigation, route }) => {
                             <View style={{ width: 24 }} />
                         </View>
 
-                        <ScrollView>
+                        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
                             {accounts.map((acc) => (
                                 <TouchableOpacity
                                     key={acc.account_id}
@@ -472,7 +473,7 @@ const EditTransaction = ({ navigation, route }) => {
                 onRequestClose={() => setShowMerchantModal(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { height: '80%' }]}>
+                    <View style={[styles.modalContent, { height: '85%', paddingBottom: Math.max(24, insets.bottom + 16) }]}>
                         <View style={styles.modalHeader}>
                             <TouchableOpacity onPress={() => setShowMerchantModal(false)} style={styles.modalCloseButton}>
                                 <X size={24} color="#64748B" />
@@ -508,7 +509,7 @@ const EditTransaction = ({ navigation, route }) => {
                             }}
                         />
 
-                        <ScrollView>
+                        <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
                             {filteredMerchants.map((m, idx) => (
                                 <TouchableOpacity
                                     key={idx}
@@ -566,7 +567,7 @@ const EditTransaction = ({ navigation, route }) => {
                 onRequestClose={() => setShowDateModal(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { height: 'auto', maxHeight: '80%' }]}>
+                    <View style={[styles.modalContent, { height: 'auto', maxHeight: '85%', paddingBottom: Math.max(24, insets.bottom + 16) }]}>
                         <View style={styles.modalHeader}>
                             <TouchableOpacity onPress={() => setShowDateModal(false)} style={styles.modalCloseButton}>
                                 <X size={24} color="#64748B" />
@@ -594,7 +595,7 @@ const EditTransaction = ({ navigation, route }) => {
                 onRequestClose={() => setShowNoteModal(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { height: '60%' }]}>
+                    <View style={[styles.modalContent, { height: '70%', paddingBottom: Math.max(24, insets.bottom + 16) }]}>
                         <View style={styles.modalHeader}>
                             <TouchableOpacity onPress={() => setShowNoteModal(false)} style={styles.modalCloseButton}>
                                 <X size={24} color="#64748B" />
