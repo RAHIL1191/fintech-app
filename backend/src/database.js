@@ -345,9 +345,16 @@ class DatabaseManager {
     }
 
     async getMerchantMetadataMap() {
+        if (!this.pool && !this.db) await this.init();
         const rows = await this.all('SELECT * FROM merchant_metadata');
         return rows.reduce((map, row) => {
-            map[row.merchant_name] = row;
+            // Store by name as provided in DB
+            map[row.name] = row;
+            // Also store by cleaned name if different
+            const cleaned = cleanMerchantName(row.name);
+            if (cleaned && cleaned !== row.name) {
+                map[cleaned] = row;
+            }
             return map;
         }, {});
     }

@@ -219,8 +219,13 @@ app.get('/api/transactions', async (req, res) => {
             const txOverride = metadata[t.transaction_id] || {};
             // Use merchant_name if available, fallback to name for rule matching
             const merchantName = t.merchant_name || t.name;
+            const cleanedMerchant = cleanMerchantName(t.merchant_name);
             const cleanedName = cleanMerchantName(t.name);
-            const merchantOverride = merchantRules[merchantName] || merchantRules[cleanedName] || {};
+
+            const merchantOverride = merchantRules[merchantName] ||
+                merchantRules[t.name] ||
+                merchantRules[cleanedMerchant] ||
+                merchantRules[cleanedName] || {};
 
             // Priority: Transaction Metadata > Merchant Rule > Plaid Detailed Category > Plaid Primary Category > Plaid Legacy Category
             const pfDetailed = t.personal_finance_category?.detailed?.replace(/_/g, ' ')
