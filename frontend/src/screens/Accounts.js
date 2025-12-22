@@ -68,10 +68,13 @@ const Accounts = ({ navigation }) => {
         outputRange: ['0deg', '360deg'],
     });
 
-    const fetchAccounts = async (tokenOverride = null) => {
+    const fetchAccounts = async (tokenOverride = null, forceSync = false) => {
         const params = {};
         if (tokenOverride || accessToken) {
             params.access_token = tokenOverride || accessToken;
+        }
+        if (forceSync) {
+            params.sync = 'true';
         }
 
         if (accounts.length === 0) setLoading(true);
@@ -223,7 +226,7 @@ const Accounts = ({ navigation }) => {
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
                 refreshControl={
-                    <RefreshControl refreshing={loading} onRefresh={fetchAccounts} />
+                    <RefreshControl refreshing={loading} onRefresh={() => fetchAccounts(null, true)} />
                 }
             >
 

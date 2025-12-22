@@ -11,47 +11,38 @@ const Dashboard = () => {
     const [balance, setBalance] = useState({ total: '0.00', income: '0.00', expenses: '0.00' });
     const [transactions, setTransactions] = useState([]);
 
-    const fetchDashboardData = async (token) => {
+    const fetchDashboardData = async (forceSync = false) => {
         setLoading(true);
         try {
             console.log('Fetching transactions from backend...');
-            // Backend handles token from DB
-            const response = await api.get('/transactions');
+            const params = {};
+            if (forceSync || (typeof forceSync === 'object' && forceSync.nativeEvent)) {
+                // If called from RefreshControl, forceSync might be the event object
+                params.sync = 'true';
+            }
+
+            const response = await api.get('/transactions', { params });
 
             console.log('Frontend: Received API response');
-            console.log('Frontend: Raw Response Keys:', Object.keys(response.data));
-
-            // Process accounts for balance
             const accounts = response.data.accounts || [];
-            console.log(`Frontend: Found ${accounts.length} accounts`);
-            if (accounts.length > 0) {
-                console.log('Frontend: First Account Balance:', accounts[0].balances.current);
-            }
             const totalBalance = accounts.reduce((sum, acc) => sum + (acc.balances.current || 0), 0);
 
-            // Process transactions
             const plaidTransactions = response.data.transactions || [];
-            console.log(`Frontend: Found ${plaidTransactions.length} transactions in response`);
-
-            if (plaidTransactions.length > 0) {
-                console.log('Frontend: Sample Transaction:', JSON.stringify(plaidTransactions[0]).substring(0, 100));
-            }
             const formattedTxs = plaidTransactions.map(tx => ({
                 id: tx.transaction_id,
                 title: tx.name,
                 amount: `${tx.amount < 0 ? '+' : '-'}$${Math.abs(tx.amount).toFixed(2)}`,
                 category: tx.category ? tx.category[0] : 'General',
                 date: tx.date,
-                isIncome: tx.amount < 0 // Plaid amounts: positive is outgoing, negative is incoming
-            })).slice(0, 10); // Show last 10
+                isIncome: tx.amount < 0
+            })).slice(0, 10);
 
             setBalance({
                 total: totalBalance.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
-                income: 'Calculating...', // Simplified for now
+                income: 'Calculating...',
                 expenses: 'Calculating...'
             });
             setTransactions(formattedTxs);
-            setAccessToken(token);
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
             const msg = error.response ? JSON.stringify(error.response.data) : error.message;

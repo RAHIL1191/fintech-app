@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl, ScrollView, Alert } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Menu, Search, RefreshCw, Filter } from 'lucide-react-native';
@@ -27,14 +27,20 @@ const Transactions = ({ navigation }) => {
         }
     }, [isFocused]);
 
-    const fetchTransactions = async () => {
+    const fetchTransactions = async (forceSync = false) => {
+        const params = {};
+        if (forceSync || (typeof forceSync === 'object' && forceSync.nativeEvent)) {
+            params.sync = 'true';
+        }
+
         if (transactions.length === 0) setLoading(true);
         try {
-            const response = await api.get('/transactions');
+            const response = await api.get('/transactions', { params });
             const txs = response.data.transactions || [];
             setTransactions(txs);
         } catch (error) {
             console.log('Fetching transactions error:', error.message);
+            Alert.alert('Refresh Error', 'Failed to fetch the latest transactions.');
         } finally {
             setLoading(false);
         }
@@ -80,14 +86,19 @@ const Transactions = ({ navigation }) => {
                 {loading ? (
                     <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 50 }} />
                 ) : (
-                    <>
+                    <ScrollView
+                        style={{ flex: 1 }}
+                        refreshControl={
+                            <RefreshControl refreshing={loading} onRefresh={() => fetchTransactions(true)} tintColor="#0EA5E9" />
+                        }
+                    >
                         {selectedTab === 'CATEGORIES' && <CategoriesTab key={`cat-${transactions.length}`} transactions={transactions} navigation={navigation} />}
                         {selectedTab === 'MERCHANTS' && <MerchantsTab key={`mer-${transactions.length}`} transactions={transactions} navigation={navigation} />}
                         {selectedTab === 'DAILY' && <DailyTab key={`dai-${transactions.length}`} transactions={transactions} navigation={navigation} />}
                         {selectedTab === 'MONTHLY' && <MonthlyTab key={`mon-${transactions.length}`} transactions={transactions} navigation={navigation} />}
                         {selectedTab === 'RECURRING' && <RecurringTab key={`rec-${transactions.length}`} transactions={transactions} navigation={navigation} />}
                         {selectedTab === 'TRANSFERS' && <TransfersTab key={`tra-${transactions.length}`} transactions={transactions} navigation={navigation} />}
-                    </>
+                    </ScrollView>
                 )}
             </View>
         </SafeAreaView>

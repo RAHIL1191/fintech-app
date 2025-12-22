@@ -111,6 +111,20 @@ class DatabaseManager {
                 iso_currency_code TEXT,
                 last_updated_datetime TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`,
+            // Cached Transactions
+            `CREATE TABLE IF NOT EXISTS cached_transactions (
+                transaction_id TEXT PRIMARY KEY,
+                account_id TEXT,
+                amount REAL,
+                date TEXT,
+                name TEXT,
+                merchant_name TEXT,
+                category TEXT,
+                pending INTEGER,
+                iso_currency_code TEXT,
+                item_id TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`
         ];
 
@@ -289,7 +303,7 @@ class DatabaseManager {
                         account_id, item_id, name, mask, official_name, type, subtype, 
                         current_balance, iso_currency_code, last_updated_datetime, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
                     ON CONFLICT(account_id) DO UPDATE SET
                         current_balance = EXCLUDED.current_balance,
                         last_updated_datetime = EXCLUDED.last_updated_datetime,
@@ -349,6 +363,80 @@ class DatabaseManager {
                 iso_currency_code: row.iso_currency_code,
                 last_updated_datetime: row.last_updated_datetime
             }
+        }));
+    }
+
+    async upsertTransactions(transactions, itemId) {
+        if (!this.pool && !this.db) await this.init();
+        for (const tx of transactions) {
+            let sql;
+            if (this.isPostgres) {
+                sql = `
+                    INSERT INTO cached_transactions (
+                        transaction_id, account_id, amount, date, name, merchant_name, 
+                        category, pending, iso_currency_code, item_id, updated_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+                    ON CONFLICT(transaction_id) DO UPDATE SET
+                        amount = EXCLUDED.amount,
+                        pending = EXCLUDED.pending,
+                        updated_at = CURRENT_TIMESTAMP
+                `;
+            } else {
+                sql = `
+                    INSERT INTO cached_transactions (
+                        transaction_id, account_id, amount, date, name, merchant_name, 
+                        category, pending, iso_currency_code, item_id, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(transaction_id) DO UPDATE SET
+                        amount = excluded.amount,
+                        pending = excluded.pending,
+                        updated_at = CURRENT_TIMESTAMP
+                `;
+            }
+            await this.run(sql, [
+                tx.transaction_id,
+                tx.account_id,
+                tx.amount,
+                tx.date,
+                tx.name,
+                tx.merchant_name,
+                tx.category ? tx.category.join(',') : null,
+                tx.pending ? 1 : 0,
+                tx.iso_currency_code,
+                itemId
+            ]);
+        }
+    }
+
+    async getCachedTransactions(itemIds = []) {
+        if (!this.pool && !this.db) await this.init();
+        let sql = 'SELECT * FROM cached_transactions';
+        let params = [];
+
+        if (itemIds.length > 0) {
+            const placeholders = this.isPostgres
+                ? itemIds.map((_, i) => `$${i + 1}`).join(',')
+                : itemIds.map(() => '?').join(',');
+            sql += ` WHERE item_id IN (${placeholders})`;
+            params = itemIds;
+        }
+
+        sql += ' ORDER BY date DESC';
+        const rows = await this.all(sql, params);
+
+        return rows.map(row => ({
+            transaction_id: row.transaction_id,
+            account_id: row.account_id,
+            amount: row.amount,
+            date: row.date,
+            name: row.name,
+            merchant_name: row.merchant_name,
+            category: row.category ? row.category.split(',') : [],
+            pending: row.pending === 1,
+            iso_currency_code: row.iso_currency_code,
+            item_id: row.item_id
         }));
     }
 }
