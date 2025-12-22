@@ -39,9 +39,6 @@ const MainTabs = () => {
                     backgroundColor: '#FFFFFF',
                     borderTopWidth: 1,
                     borderTopColor: '#E5E7EB',
-                    paddingTop: 5,
-                    height: 65,
-                    paddingBottom: 10,
                 },
                 headerShown: false,
             }}
