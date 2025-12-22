@@ -221,8 +221,17 @@ app.get('/api/transactions', async (req, res) => {
             const merchantName = t.merchant_name || t.name;
             const merchantOverride = merchantRules[merchantName] || {};
 
-            // Priority: Transaction Metadata > Merchant Rule > Plaid Personal Finance Category > Plaid Legacy Category
-            const pfCategory = t.personal_finance_category?.primary || (t.category && t.category.length > 0 ? t.category[0] : 'General');
+            // Priority: Transaction Metadata > Merchant Rule > Plaid Detailed Category > Plaid Primary Category > Plaid Legacy Category
+            const pfDetailed = t.personal_finance_category?.detailed?.replace(/_/g, ' ')
+                ?.toLowerCase()
+                ?.replace(/\b\w/g, l => l.toUpperCase());
+            const pfPrimary = t.personal_finance_category?.primary?.replace(/_/g, ' ')
+                ?.toLowerCase()
+                ?.replace(/\b\w/g, l => l.toUpperCase());
+
+            const legacyCategory = t.category && t.category.length > 0 ? t.category[0] : null;
+
+            const pfCategory = pfDetailed || pfPrimary || legacyCategory || 'General';
             const finalCategory = txOverride.category || merchantOverride.category || pfCategory;
 
             return {
