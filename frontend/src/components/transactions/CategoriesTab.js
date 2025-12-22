@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { ChevronLeft, ChevronRight, MoreHorizontal, ShoppingBag, Coffee, Home, CreditCard } from 'lucide-react-native';
 import DonutChart from '../DonutChart';
@@ -7,10 +7,11 @@ const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing })
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [typeFilter, setTypeFilter] = useState('Expenses'); // Expenses | Income
     const [expandedCategory, setExpandedCategory] = useState(null); // Track absolute category name
+    const initializedRef = useRef(false);
 
-    // Auto-set date to the most recent transaction when data loads
+    // Auto-set date to the most recent transaction when data loads (ONLY ONCE)
     React.useEffect(() => {
-        if (transactions.length > 0) {
+        if (!initializedRef.current && transactions.length > 0) {
             // Assuming transactions are sorted desc by date, or we iterate to find max
             // Usually Plaid returns desc.
             const latestTx = transactions[0];
@@ -18,6 +19,7 @@ const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing })
             const [y, m, d] = latestTx.date.split('-').map(Number);
             const latestDate = new Date(y, m - 1, d);
             setSelectedDate(latestDate);
+            initializedRef.current = true;
         }
     }, [transactions]);
 
