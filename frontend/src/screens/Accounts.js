@@ -11,7 +11,8 @@ import {
     Easing,
     Dimensions,
     Button,
-    RefreshControl
+    RefreshControl,
+    Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -37,6 +38,16 @@ const Accounts = ({ navigation }) => {
     const [expandedGroups, setExpandedGroups] = useState({});
     const [selectedFilter, setSelectedFilter] = useState('NET WORTH');
     const [timeFilter, setTimeFilter] = useState('1M');
+    const [includeMortgage, setIncludeMortgage] = useState(false);
+
+    const formatCurrency = (amount) => {
+        const isNegative = amount < 0;
+        const absAmount = Math.abs(amount).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+        return `${isNegative ? '-' : ''}$${absAmount}`;
+    };
 
     const spinValue = useRef(new Animated.Value(0)).current;
 
@@ -178,7 +189,18 @@ const Accounts = ({ navigation }) => {
 
     const displayBalance = filteredAccounts.reduce((sum, acc) => {
         const balance = acc.balances.current || 0;
-        if (acc.type === 'credit' || acc.type === 'loan') {
+        const type = acc.type.toLowerCase();
+        const subtype = (acc.subtype || '').toLowerCase();
+
+        // If this is Net Worth view, apply mortgage exclusion logic
+        if (selectedFilter === 'NET WORTH') {
+            const isMortgage = subtype.includes('mortgage') || (type === 'loan' && subtype === 'loan');
+            if (isMortgage && !includeMortgage) {
+                return sum; // Skip this debt
+            }
+        }
+
+        if (type === 'credit' || type === 'loan') {
             return sum - balance;
         }
         return sum + balance;
@@ -241,12 +263,28 @@ const Accounts = ({ navigation }) => {
 
                 {/* Net Worth Card */}
                 <View style={styles.netWorthCard}>
-                    <Text style={styles.netWorthAmount}>
-                        ${displayBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </Text>
-                    <Text style={styles.netWorthChange}>
-                        {displayTitle} balance
-                    </Text>
+                    <View style={styles.netWorthHeader}>
+                        <View>
+                            <Text style={styles.netWorthAmount}>
+                                {formatCurrency(displayBalance)}
+                            </Text>
+                            <Text style={styles.netWorthChange}>
+                                {displayTitle} balance
+                            </Text>
+                        </View>
+
+                        {selectedFilter === 'NET WORTH' && (
+                            <View style={styles.mortgageToggleContainer}>
+                                <Text style={styles.mortgageToggleLabel}>Include Mortgage</Text>
+                                <Switch
+                                    value={includeMortgage}
+                                    onValueChange={setIncludeMortgage}
+                                    trackColor={{ false: '#E5E7EB', true: '#6366F1' }}
+                                    thumbColor="#FFF"
+                                />
+                            </View>
+                        )}
+                    </View>
                 </View>
 
                 {/* Time Filters */}
@@ -265,21 +303,48 @@ const Accounts = ({ navigation }) => {
                 ) : (
                     Object.entries(groupedAccounts).map(([name, groupAccounts]) => {
                         const isExpanded = !!expandedGroups[name];
-                        const groupTotal = groupAccounts.reduce((sum, acc) => sum + (acc.balances.current || 0), 0);
+                        const groupTotal = groupAccounts.reduce((sum, acc) => {
+                            const balance = acc.balances.current || 0;
+                            // For totals, we treat credit/loans as debt (negative) only in Net Worth, 
+                            // but usually per-bank total is just sum of balances? 
+                            // Actually, standard practice for "Bank Total" is sum, let's keep it simple or follow net worth logic.
+                            if (acc.type === 'credit' || acc.type === 'loan') return sum - balance;
+                            return sum + balance;
+                        }, 0);
+
+                        const itemId = groupAccounts[0]?.item_id;
 
                         return (
-                            <View key={name} style={styles.groupContainer}>
+                            <View key={name} style={styles.bankCard}>
                                 <TouchableOpacity
-                                    style={styles.groupHeader}
+                                    style={styles.bankHeader}
                                     onPress={() => toggleGroup(name)}
-                                    activeOpacity={0.6}
+                                    activeOpacity={0.7}
                                 >
-                                    <Text style={styles.groupName}>{name}</Text>
-                                    <View style={styles.groupHeaderRight}>
-                                        <Text style={styles.groupTotal}>
-                                            ${groupTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                        </Text>
-                                        {isExpanded ? <ChevronUp size={20} color="#666" /> : <ChevronDown size={20} color="#666" />}
+                                    <View style={styles.bankHeaderLeft}>
+                                        <View style={styles.bankIconPlaceholder}>
+                                            <Text style={styles.bankIconText}>{name.charAt(0)}</Text>
+                                        </View>
+                                        <View>
+                                            <Text style={styles.bankName}>{name}</Text>
+                                            <Text style={styles.bankSubtext}>{groupAccounts.length} accounts</Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.bankHeaderRight}>
+                                        <View style={{ alignItems: 'flex-end', marginRight: 12 }}>
+                                            <Text style={[styles.bankTotal, { color: groupTotal < 0 ? '#EF4444' : '#6366F1' }]}>
+                                                {formatCurrency(groupTotal)}
+                                            </Text>
+                                            <Text style={styles.bankStatus}>Current Balance</Text>
+                                        </View>
+
+                                        <TouchableOpacity
+                                            onPress={() => repairConnection(itemId)}
+                                            style={styles.settingsBtn}
+                                        >
+                                            <MoreVertical size={20} color="#64748B" />
+                                        </TouchableOpacity>
                                     </View>
                                 </TouchableOpacity>
 
@@ -296,31 +361,15 @@ const Accounts = ({ navigation }) => {
                                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                                         <Text style={styles.accountItemName}>{acc.name}</Text>
                                                         {(() => {
-                                                            const lastUpdated = acc.balances.last_updated_datetime;
                                                             const hasError = !!acc.error_code;
-
-                                                            if (hasError) {
-                                                                return (
-                                                                    <TouchableOpacity onPress={() => repairConnection(acc.item_id)}>
-                                                                        <AlertCircle size={14} color="#EF4444" style={{ marginLeft: 6 }} />
-                                                                    </TouchableOpacity>
-                                                                );
-                                                            }
-
-                                                            if (lastUpdated) {
-                                                                const diff = new Date() - new Date(lastUpdated);
-                                                                const hours = diff / (1000 * 60 * 60);
-                                                                if (hours > 24) {
-                                                                    return <AlertCircle size={14} color="#EF4444" style={{ marginLeft: 6 }} />;
-                                                                }
-                                                            }
+                                                            if (hasError) return <AlertCircle size={14} color="#EF4444" style={{ marginLeft: 6 }} />;
                                                             return null;
                                                         })()}
                                                     </View>
                                                     <Text style={styles.accountItemType}>{acc.subtype || acc.type} •••• {acc.mask}</Text>
                                                 </View>
-                                                <Text style={styles.accountItemBalance}>
-                                                    ${acc.balances.current.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                <Text style={[styles.accountItemBalance, { color: (acc.type === 'credit' || acc.type === 'loan') ? '#EF4444' : '#1A1A1A' }]}>
+                                                    {formatCurrency(acc.balances.current)}
                                                 </Text>
                                             </TouchableOpacity>
                                         ))}
@@ -395,8 +444,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingVertical: 16,
     },
+    netWorthHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
     netWorthAmount: {
-        fontSize: 36,
+        fontSize: 32,
         fontWeight: '800',
         color: '#1A1A1A',
     },
@@ -404,6 +458,16 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#9CA3AF',
         marginTop: 4,
+    },
+    mortgageToggleContainer: {
+        alignItems: 'center',
+    },
+    mortgageToggleLabel: {
+        fontSize: 10,
+        color: '#9CA3AF',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        marginBottom: 4,
     },
     timeFilterRow: {
         flexDirection: 'row',
@@ -428,46 +492,85 @@ const styles = StyleSheet.create({
     activeTimeBtnText: {
         color: '#1A1A1A',
     },
-    groupContainer: {
+    bankCard: {
         marginHorizontal: 16,
-        marginBottom: 12,
+        marginBottom: 16,
         backgroundColor: '#FFF',
-        borderRadius: 16,
+        borderRadius: 20,
         borderWidth: 1,
         borderColor: '#E5E7EB',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
         overflow: 'hidden',
     },
-    groupHeader: {
+    bankHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
+        padding: 20,
     },
-    groupName: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1A1A1A',
-    },
-    groupHeaderRight: {
+    bankHeaderLeft: {
         flexDirection: 'row',
         alignItems: 'center',
     },
-    groupTotal: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#6366F1',
+    bankIconPlaceholder: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: '#F3F4F6',
+        justifyContent: 'center',
+        alignItems: 'center',
         marginRight: 12,
     },
+    bankIconText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#6366F1',
+    },
+    bankName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1A1A1A',
+    },
+    bankSubtext: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        marginTop: 2,
+    },
+    bankHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    bankTotal: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#6366F1',
+    },
+    bankStatus: {
+        fontSize: 10,
+        color: '#9CA3AF',
+        fontWeight: '600',
+        textTransform: 'uppercase',
+    },
+    settingsBtn: {
+        padding: 8,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 10,
+    },
     accountList: {
+        backgroundColor: '#F9FAFB',
         borderTopWidth: 1,
         borderTopColor: '#F3F4F6',
-        backgroundColor: '#FAFAFA',
     },
     accountItem: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: 16,
+        paddingLeft: 20,
         borderBottomWidth: 1,
         borderBottomColor: '#F3F4F6',
     },
@@ -485,7 +588,7 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
     accountItemBalance: {
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: '700',
         color: '#1A1A1A',
     },

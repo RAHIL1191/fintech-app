@@ -282,11 +282,20 @@ app.get('/api/accounts', async (req, res) => {
         const itemsToFetchFromPlaid = [];
 
         // 1. Check Cache first (unless sync=true)
+        const itemMap = items.reduce((map, item) => {
+            map[item.item_id] = item;
+            return map;
+        }, {});
+
         if (sync !== 'true') {
             for (const item of items) {
                 const cached = await db.getCachedAccountsByItem(item.item_id);
                 if (cached.length > 0) {
-                    allAccounts.push(...cached.map(a => ({ ...a, item_id: item.item_id })));
+                    allAccounts.push(...cached.map(a => ({
+                        ...a,
+                        item_id: item.item_id,
+                        institution_name: item.institution_name
+                    })));
                 } else {
                     itemsToFetchFromPlaid.push(item);
                 }
@@ -303,7 +312,11 @@ app.get('/api/accounts', async (req, res) => {
                     const response = await client.accountsGet({ access_token: item.access_token });
                     const accounts = response.data.accounts;
                     await db.upsertAccounts(accounts, item.item_id);
-                    return accounts.map(a => ({ ...a, item_id: item.item_id }));
+                    return accounts.map(a => ({
+                        ...a,
+                        item_id: item.item_id,
+                        institution_name: item.institution_name
+                    }));
                 } catch (err) {
                     const errorData = err.response ? err.response.data : {};
                     const errorCode = errorData.error_code || 'UNKNOWN_ERROR';
@@ -311,7 +324,12 @@ app.get('/api/accounts', async (req, res) => {
 
                     const cached = await db.getCachedAccountsByItem(item.item_id);
                     if (cached.length > 0) {
-                        return cached.map(acc => ({ ...acc, item_id: item.item_id, error_code: errorCode }));
+                        return cached.map(acc => ({
+                            ...acc,
+                            item_id: item.item_id,
+                            error_code: errorCode,
+                            institution_name: item.institution_name
+                        }));
                     }
 
                     return [{

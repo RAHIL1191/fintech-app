@@ -67,6 +67,27 @@ const AccountDetails = ({ route, navigation }) => {
         </TouchableOpacity>
     );
 
+    const getTimeAgo = (timestamp) => {
+        if (!timestamp) return 'Never';
+        const now = new Date();
+        const past = new Date(timestamp);
+        const diffInMs = now - past;
+        const diffInMins = Math.floor(diffInMs / (1000 * 60));
+        const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+        const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+        if (diffInMins < 1) return 'Just now';
+        if (diffInMins < 60) return `${diffInMins} ${diffInMins === 1 ? 'minute' : 'minutes'} ago`;
+        if (diffInHours < 24) return `${diffInHours} ${diffInHours === 1 ? 'hour' : 'hours'} ago`;
+        return `${diffInDays} ${diffInDays === 1 ? 'day' : 'days'} ago`;
+    };
+
+    const getHoursSince = (timestamp) => {
+        if (!timestamp) return 'N/A';
+        const diffInMs = new Date() - new Date(timestamp);
+        return (diffInMs / (1000 * 60 * 60)).toFixed(1);
+    };
+
     const TransactionItem = ({ item }) => (
         <View style={styles.transactionItem}>
             <View style={styles.transactionIconBox}>
@@ -92,31 +113,10 @@ const AccountDetails = ({ route, navigation }) => {
                     <ChevronLeft size={24} color="#1A1A1A" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Account Details</Text>
-                <TouchableOpacity>
-                    <Trash2 size={24} color="#EF4444" />
-                </TouchableOpacity>
+                <View style={{ width: 24 }} />
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Account Card Identifier */}
-                <View style={styles.accountIdentifierBar}>
-                    <TouchableOpacity><ChevronLeft size={18} color="#666" /></TouchableOpacity>
-                    <Text style={styles.accountCardNumber}>
-                        {account.mask ? `XXXX XXXX XXXX ${account.mask}` : account.name}
-                    </Text>
-                    <TouchableOpacity><MoreHorizontal size={18} color="#666" /></TouchableOpacity>
-                </View>
-
-                {/* Sync Banner */}
-                <View style={styles.warningBanner}>
-                    <View style={styles.warningContent}>
-                        <Text style={styles.warningTitle}>Bank connection needs updating.</Text>
-                        <Text style={styles.warningSub}>Please sync to continue syncing transactions and balances.</Text>
-                    </View>
-                    <TouchableOpacity style={styles.syncBtn}>
-                        <Text style={styles.syncBtnText}>Sync</Text>
-                    </TouchableOpacity>
-                </View>
 
                 {/* Balance Section */}
                 <View style={styles.balanceSection}>
@@ -156,7 +156,10 @@ const AccountDetails = ({ route, navigation }) => {
                     ) : (
                         <Text style={styles.emptyText}>No recent transactions</Text>
                     )}
-                    <TouchableOpacity style={styles.viewAllBtn}>
+                    <TouchableOpacity
+                        style={styles.viewAllBtn}
+                        onPress={() => navigation.navigate('AccountTransactions', { account })}
+                    >
                         <Text style={styles.viewAllText}>View all transactions</Text>
                     </TouchableOpacity>
                 </View>
@@ -199,14 +202,21 @@ const AccountDetails = ({ route, navigation }) => {
                             <RefreshCw size={14} color="#6B7280" />
                             <Text style={styles.statusLabelText}>Last sync</Text>
                         </View>
-                        <Text style={styles.statusValueText}>5 minutes ago</Text>
+                        <Text style={styles.statusValueText}>
+                            {getTimeAgo(account.balances.last_updated_datetime)}
+                        </Text>
                     </View>
                     <View style={styles.statusItem}>
                         <View style={styles.statusLabelRow}>
-                            <Clock size={14} color="#EF4444" />
+                            <Clock
+                                size={14}
+                                color={parseFloat(getHoursSince(account.balances.last_updated_datetime)) > 24 ? '#EF4444' : '#10B981'}
+                            />
                             <Text style={styles.statusLabelText}>Time since sync</Text>
                         </View>
-                        <Text style={styles.statusValueText}>0.1 hours</Text>
+                        <Text style={styles.statusValueText}>
+                            {getHoursSince(account.balances.last_updated_datetime)} hours
+                        </Text>
                     </View>
                 </View>
             </ScrollView>
@@ -231,54 +241,6 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
         color: '#1A1A1A',
-    },
-    accountIdentifierBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingVertical: 15,
-        marginTop: 10,
-    },
-    accountCardNumber: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#1A1A1A',
-        letterSpacing: 1,
-    },
-    warningBanner: {
-        backgroundColor: '#FDE047',
-        marginHorizontal: 16,
-        borderRadius: 8,
-        padding: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    warningContent: {
-        flex: 1,
-        marginRight: 10,
-    },
-    warningTitle: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: '#1A1A1A',
-    },
-    warningSub: {
-        fontSize: 11,
-        color: '#1A1A1A',
-        marginTop: 2,
-    },
-    syncBtn: {
-        backgroundColor: '#2563EB',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
-    },
-    syncBtnText: {
-        color: '#FFF',
-        fontSize: 13,
-        fontWeight: '700',
     },
     balanceSection: {
         paddingHorizontal: 20,
