@@ -14,6 +14,7 @@ import AccountDetails from './src/screens/AccountDetails';
 import Transactions from './src/screens/Transactions';
 import EditTransaction from './src/screens/EditTransaction';
 import CashFlow from './src/screens/CashFlow';
+import MerchantRules from './src/screens/MerchantRules';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -95,6 +96,7 @@ export default function App() {
                             options={{ presentation: 'modal' }}
                         />
                         <RootStack.Screen name="CashFlow" component={CashFlow} />
+                        <RootStack.Screen name="MerchantRules" component={MerchantRules} />
                     </RootStack.Navigator>
                 </NavigationContainer>
             </SafeAreaProvider>

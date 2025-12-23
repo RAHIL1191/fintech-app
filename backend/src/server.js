@@ -251,7 +251,9 @@ app.get('/api/transactions', async (req, res) => {
                 date: txOverride.date || t.date,
                 note: txOverride.note || t.note,
                 recurring_frequency: txOverride.recurring_frequency || t.recurring_frequency,
-                is_transfer: txOverride.is_transfer !== undefined ? !!txOverride.is_transfer : (t.is_transfer || false)
+                is_transfer: txOverride.is_transfer !== undefined
+                    ? !!txOverride.is_transfer
+                    : (merchantOverride.is_transfer === 1 ? true : (t.is_transfer || false))
             };
         });
 
@@ -350,6 +352,31 @@ app.get('/api/merchants', async (req, res) => {
         console.error('Error fetching merchants:', error);
         logToFile(`Error fetching merchants: ${msg}`); // Capture invalid function calls etc
         res.status(500).json({ error: 'Failed to fetch merchants' });
+    }
+});
+
+// Apply Merchant Rule (Category + Transfer status) to ALL matching transactions
+app.post('/api/merchants/apply-rule', async (req, res) => {
+    const { merchant_name, category, is_transfer } = req.body;
+    try {
+        // 1. Update the Rule itself (future transactions)
+        await db.setMerchantMetadata(merchant_name, {
+            category,
+            is_transfer: is_transfer ? 1 : 0
+        });
+
+        // 2. Apply to existing transactions
+        const result = await db.applyMerchantRuleToTransactions(merchant_name, category, is_transfer ? 1 : 0);
+
+        res.json({
+            status: 'success',
+            message: `Rule saved and applied to ${result.changes} transactions.`
+        });
+    } catch (error) {
+        console.error('Error applying merchant rule:', error);
+        const errorMsg = error.message || error.toString();
+        logToFile(`Error applying merchant rule for ${merchant_name}: ${errorMsg}`);
+        res.status(500).json({ error: 'Failed to apply merchant rule', details: errorMsg });
     }
 });
 

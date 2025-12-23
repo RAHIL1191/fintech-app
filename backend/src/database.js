@@ -47,20 +47,36 @@ class DatabaseManager {
     }
 
     async runMigrations() {
-        // Migration: Add merchant_name to transaction_metadata if missing
-        try {
-            await this.exec('ALTER TABLE transaction_metadata ADD COLUMN IF NOT EXISTS merchant_name TEXT');
-        } catch (err) { }
+        // Helper to add column if it doesn't exist
+        const addColumn = async (table, column, type, defaultValue = null) => {
+            if (this.isPostgres) {
+                try {
+                    const defaultSql = defaultValue !== null ? `DEFAULT ${defaultValue}` : '';
+                    await this.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${type} ${defaultSql}`);
+                } catch (err) {
+                    console.log(`Migration (${table}.${column}) info:`, err.message);
+                }
+            } else {
+                try {
+                    const defaultSql = defaultValue !== null ? `DEFAULT ${defaultValue}` : '';
+                    await this.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type} ${defaultSql}`);
+                    console.log(`Migration: Added ${column} to ${table}`);
+                } catch (err) {
+                    // SQLite throws if column exists
+                    if (!err.message.includes('duplicate column name')) {
+                        // Keep console clean if it's just a duplicate column error
+                        // console.log(`Migration (${table}.${column}) already applied or failed:`, err.message);
+                    }
+                }
+            }
+        };
 
-        // Migration: Add account_id to transaction_metadata if missing
-        try {
-            await this.exec('ALTER TABLE transaction_metadata ADD COLUMN IF NOT EXISTS account_id TEXT');
-        } catch (err) { }
-
-        // Migration: Add date to transaction_metadata if missing
-        try {
-            await this.exec('ALTER TABLE transaction_metadata ADD COLUMN IF NOT EXISTS date TEXT');
-        } catch (err) { }
+        await addColumn('transaction_metadata', 'merchant_name', 'TEXT');
+        await addColumn('transaction_metadata', 'account_id', 'TEXT');
+        await addColumn('transaction_metadata', 'date', 'TEXT');
+        await addColumn('transaction_metadata', 'recurring_frequency', 'TEXT');
+        await addColumn('transaction_metadata', 'is_transfer', 'INTEGER', 0);
+        await addColumn('merchant_metadata', 'is_transfer', 'INTEGER', 0);
     }
 
     async createTables() {
@@ -90,6 +106,7 @@ class DatabaseManager {
                 category TEXT,
                 logo_url TEXT,
                 is_favorite INTEGER DEFAULT 0,
+                is_transfer INTEGER DEFAULT 0,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
             // Categories
@@ -257,36 +274,70 @@ class DatabaseManager {
 
     async setMerchantMetadata(name, data) {
         if (!this.pool && !this.db) await this.init();
-        const { category, logo_url, is_favorite } = data;
+        const { category, logo_url, is_favorite, is_transfer } = data;
         const cleanedName = cleanMerchantName(name);
 
         let sql;
         if (this.isPostgres) {
             sql = `
-                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, updated_at)
-                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, is_transfer, updated_at)
+                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
                 ON CONFLICT(merchant_name) DO UPDATE SET
                     category = COALESCE(EXCLUDED.category, merchant_metadata.category),
                     logo_url = COALESCE(EXCLUDED.logo_url, merchant_metadata.logo_url),
                     is_favorite = COALESCE(EXCLUDED.is_favorite, merchant_metadata.is_favorite),
+                    is_transfer = COALESCE(EXCLUDED.is_transfer, merchant_metadata.is_transfer),
                     updated_at = CURRENT_TIMESTAMP
             `;
         } else {
             sql = `
-                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, is_transfer, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(merchant_name) DO UPDATE SET
                     category = COALESCE(excluded.category, merchant_metadata.category),
                     logo_url = COALESCE(excluded.logo_url, merchant_metadata.logo_url),
                     is_favorite = COALESCE(excluded.is_favorite, merchant_metadata.is_favorite),
+                    is_transfer = COALESCE(excluded.is_transfer, merchant_metadata.is_transfer),
                     updated_at = CURRENT_TIMESTAMP
             `;
         }
         // Save for BOTH exact name AND cleaned name to be safe
-        await this.run(sql, [name, category, logo_url, is_favorite]);
+        await this.run(sql, [name, category, logo_url, is_favorite, is_transfer]);
         if (cleanedName && cleanedName !== name.toUpperCase()) {
-            await this.run(sql, [cleanedName, category, logo_url, is_favorite]);
+            await this.run(sql, [cleanedName, category, logo_url, is_favorite, is_transfer]);
         }
+    }
+
+    async applyMerchantRuleToTransactions(merchantName, category, isTransfer) {
+        if (!merchantName) return { changes: 0 };
+        if (!this.pool && !this.db) await this.init();
+
+        // We need to find transactions that match this merchant.
+        // Logic: Update transaction_metadata where merchant_name matches OR (merchant_name is null and cached_transactions.merchant_name matches)
+        // Since we only really write to transaction_metadata when overriding, we will Upsert into transaction_metadata for all matching cached_transactions.
+
+        // 1. Get all matching transactions from Cache
+        const exactName = merchantName;
+        const cleaned = cleanMerchantName(merchantName);
+
+        // Find IDs of transactions that look like this merchant
+        const findSql = this.isPostgres
+            ? `SELECT transaction_id FROM cached_transactions WHERE merchant_name = $1 OR merchant_name = $2 OR name = $1 OR name = $2`
+            : `SELECT transaction_id FROM cached_transactions WHERE merchant_name = ? OR merchant_name = ? OR name = ? OR name = ?`;
+
+        const rows = await this.all(findSql, [exactName, cleaned]);
+
+        let changeCount = 0;
+        for (const row of rows) {
+            // Upsert metadata
+            // We preserve existing notes/dates/etc if they exist, but OVERWRITE category and is_transfer
+            await this.setTransactionMetadata(row.transaction_id, {
+                category: category,
+                is_transfer: isTransfer
+            });
+            changeCount++;
+        }
+        return { changes: changeCount };
     }
 
     async setTransactionMetadata(id, data) {
@@ -302,15 +353,15 @@ class DatabaseManager {
         if (this.isPostgres) {
             sql = `
                 INSERT INTO transaction_metadata (transaction_id, category, merchant_name, account_id, date, note, recurring_frequency, is_transfer, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
                 ON CONFLICT(transaction_id) DO UPDATE SET
-                    category = EXCLUDED.category,
-                    merchant_name = EXCLUDED.merchant_name,
-                    account_id = EXCLUDED.account_id,
-                    date = EXCLUDED.date,
-                    note = EXCLUDED.note,
-                    recurring_frequency = EXCLUDED.recurring_frequency,
-                    is_transfer = EXCLUDED.is_transfer,
+                    category = COALESCE(EXCLUDED.category, transaction_metadata.category),
+                    merchant_name = COALESCE(EXCLUDED.merchant_name, transaction_metadata.merchant_name),
+                    account_id = COALESCE(EXCLUDED.account_id, transaction_metadata.account_id),
+                    date = COALESCE(EXCLUDED.date, transaction_metadata.date),
+                    note = COALESCE(EXCLUDED.note, transaction_metadata.note),
+                    recurring_frequency = COALESCE(EXCLUDED.recurring_frequency, transaction_metadata.recurring_frequency),
+                    is_transfer = COALESCE(EXCLUDED.is_transfer, transaction_metadata.is_transfer),
                     updated_at = CURRENT_TIMESTAMP
             `;
         } else {

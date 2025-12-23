@@ -69,6 +69,11 @@ const Transactions = ({ navigation }) => {
                 </TouchableOpacity>
                 <Text style={styles.toolbarTitle}>Transactions</Text>
                 <View style={styles.toolbarRight}>
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('MerchantRules')}>
+                        <View style={{ backgroundColor: '#1E293B', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#334155' }}>
+                            <Text style={{ color: '#0EA5E9', fontSize: 12, fontWeight: '600' }}>Rules</Text>
+                        </View>
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.iconBtn} onPress={fetchTransactions}>
                         <RefreshCw size={22} color="#0EA5E9" />
                     </TouchableOpacity>
