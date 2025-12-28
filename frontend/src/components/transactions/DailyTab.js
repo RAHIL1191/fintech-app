@@ -60,6 +60,20 @@ const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
         return <CreditCard size={20} color="#FFF" />;
     };
 
+    const formatTime = (timeStr) => {
+        const actualTime = timeStr || '12:00'; // Default to 12:00 if missing
+        try {
+            let [hours, minutes] = actualTime.split(':').map(Number);
+            const ampm = hours >= 12 ? 'p.m.' : 'a.m.';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+            return `${hours}:${minutesStr} ${ampm}`;
+        } catch (e) {
+            return timeStr;
+        }
+    };
+
     const getIconColor = (category) => {
         const cat = (category || '').toLowerCase();
         if (cat.includes('shop')) return '#F59E0B'; // Amber
@@ -121,15 +135,18 @@ const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
                                 key={t.transaction_id || idx}
                                 style={styles.card}
                                 activeOpacity={0.8}
-                                onPress={() => navigation.navigate('EditTransaction', { transaction: t, mode: 'edit' })}
+                                onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
                             >
                                 <View style={styles.cardLeft}>
                                     <View style={[styles.cardIcon, { backgroundColor: getIconColor(t.personal_finance_category?.primary) }]}>
                                         {getIconForCategory(t.personal_finance_category?.primary)}
                                     </View>
                                     <View style={styles.cardInfo}>
-                                        <Text style={styles.cardTitle} numberOfLines={1}>{t.personal_finance_category?.primary || 'General'}</Text>
-                                        <Text style={styles.cardSubtitle} numberOfLines={1}>.{t.name}</Text>
+                                        <Text style={styles.cardTitle} numberOfLines={1}>{t.name}</Text>
+                                        <Text style={styles.cardSubtitle} numberOfLines={1}>
+                                            {t.personal_finance_category?.primary || 'General'}
+                                            {t.time ? ` • ${formatTime(t.time)}` : ''}
+                                        </Text>
                                     </View>
                                 </View>
                                 <Text style={[

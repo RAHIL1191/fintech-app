@@ -87,7 +87,7 @@ const RecurringTab = ({ transactions = [], navigation, onRefresh, refreshing }) 
                             <TouchableOpacity
                                 key={item.transaction_id || idx}
                                 style={styles.card}
-                                onPress={() => navigation.navigate('EditTransaction', { transaction: item, mode: 'edit' })}
+                                onPress={() => navigation.navigate('TransactionDetails', { transaction: item })}
                             >
                                 <View style={styles.cardMain}>
                                     <View style={[

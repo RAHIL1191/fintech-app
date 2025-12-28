@@ -8,7 +8,8 @@ const { width } = Dimensions.get('window');
 const CashFlow = ({ route, navigation }) => {
     const { transactions = [], initialMonthIdx = 2, year = 2025 } = route.params || {};
     const [selectedMonthIdx, setSelectedMonthIdx] = useState(initialMonthIdx);
-    const [isExpanded, setIsExpanded] = useState(false);
+
+    const [transactionFilter, setTransactionFilter] = useState('Expenses'); // Expenses | Income
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -46,6 +47,13 @@ const CashFlow = ({ route, navigation }) => {
     }, [transactions, year]);
 
     const currentMonthData = monthlyStats.stats[selectedMonthIdx];
+
+    const filteredTransactions = useMemo(() => {
+        return currentMonthData.transactions.filter(t => {
+            if (transactionFilter === 'Expenses') return t.amount > 0;
+            return t.amount < 0;
+        });
+    }, [currentMonthData, transactionFilter]);
 
     const changeMonth = (delta) => {
         const newIdx = (selectedMonthIdx + delta + 12) % 12;
@@ -186,26 +194,37 @@ const CashFlow = ({ route, navigation }) => {
                     </View>
                 </View>
 
-                {/* Transactions Accordion */}
-                <TouchableOpacity
-                    style={styles.accordionHeader}
-                    onPress={() => setIsExpanded(!isExpanded)}
-                >
-                    <Text style={styles.accordionTitle}>Transactions</Text>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{currentMonthData.transactionCount}</Text>
-                    </View>
-                    <ChevronDown
-                        size={24}
-                        color="#94A3B8"
-                        style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
-                    />
-                </TouchableOpacity>
+                {/* Transactions Tabs */}
+                <View style={styles.tabContainer}>
+                    <TouchableOpacity
+                        style={[styles.tabBtn, transactionFilter === 'Expenses' && styles.activeTabBtn]}
+                        onPress={() => setTransactionFilter('Expenses')}
+                    >
+                        <Text style={[styles.tabText, transactionFilter === 'Expenses' && styles.activeTabText]}>
+                            Expenses
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.tabBtn, transactionFilter === 'Income' && styles.activeTabBtn]}
+                        onPress={() => setTransactionFilter('Income')}
+                    >
+                        <Text style={[styles.tabText, transactionFilter === 'Income' && styles.activeTabText]}>
+                            Income
+                        </Text>
+                    </TouchableOpacity>
+                </View>
 
-                {isExpanded && (
-                    <View style={styles.expandedTransactions}>
-                        {currentMonthData.transactions.map((t, idx) => (
-                            <View key={t.transaction_id || idx} style={styles.transactionItem}>
+                {/* Transactions List */}
+                <View style={styles.transactionsList}>
+                    {filteredTransactions.length === 0 ? (
+                        <Text style={styles.emptyText}>No {transactionFilter.toLowerCase()} found.</Text>
+                    ) : (
+                        filteredTransactions.map((t, idx) => (
+                            <TouchableOpacity
+                                key={t.transaction_id || idx}
+                                style={styles.transactionItem}
+                                onPress={() => navigation.navigate('EditTransaction', { transaction: t, mode: 'edit' })}
+                            >
                                 <View style={styles.tInfo}>
                                     <Text style={styles.tName} numberOfLines={1}>{t.name}</Text>
                                     <Text style={styles.tDate}>{t.date}</Text>
@@ -213,10 +232,10 @@ const CashFlow = ({ route, navigation }) => {
                                 <Text style={[styles.tAmount, { color: t.amount > 0 ? '#FFF' : '#10B981' }]}>
                                     {t.amount > 0 ? '-' : '+'}${Math.abs(t.amount).toFixed(2)}
                                 </Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
+                            </TouchableOpacity>
+                        ))
+                    )}
+                </View>
 
                 <View style={{ height: 100 }} />
             </ScrollView>
@@ -399,36 +418,33 @@ const styles = StyleSheet.create({
         backgroundColor: '#334155',
         marginVertical: 4,
     },
-    accordionHeader: {
+    tabContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
+        marginHorizontal: 16,
+        marginBottom: 16,
         backgroundColor: '#1E293B',
-        marginHorizontal: 16,
-        padding: 20,
-        borderRadius: 16,
-    },
-    accordionTitle: {
-        color: '#FFF',
-        fontSize: 18,
-        fontWeight: '700',
-        flex: 1,
-    },
-    badge: {
-        backgroundColor: '#0EA5E9',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
         borderRadius: 12,
-        marginRight: 12,
+        padding: 4,
     },
-    badgeText: {
+    tabBtn: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 10,
+    },
+    activeTabBtn: {
+        backgroundColor: '#3B82F6',
+    },
+    tabText: {
+        color: '#94A3B8',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    activeTabText: {
         color: '#FFF',
-        fontSize: 12,
-        fontWeight: '700',
     },
-    expandedTransactions: {
-        marginHorizontal: 16,
-        paddingHorizontal: 8,
-        paddingTop: 8,
+    transactionsList: {
+        paddingHorizontal: 16,
     },
     transactionItem: {
         flexDirection: 'row',
@@ -455,6 +471,12 @@ const styles = StyleSheet.create({
     tAmount: {
         fontSize: 14,
         fontWeight: '700',
+    },
+    emptyText: {
+        color: '#64748B',
+        textAlign: 'center',
+        marginTop: 20,
+        fontSize: 14,
     }
 });
 

@@ -9,6 +9,8 @@ import {
     Animated,
     Dimensions
 } from 'react-native';
+import { LineChart } from "react-native-gifted-charts";
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     ChevronLeft,
@@ -31,6 +33,9 @@ const AccountDetails = ({ route, navigation }) => {
     const [loading, setLoading] = useState(true);
     const [transactions, setTransactions] = useState([]);
     const [timeFilter, setTimeFilter] = useState('1M');
+    const [chartData, setChartData] = useState([]);
+    const [originalChartData, setOriginalChartData] = useState([]);
+    const [chartScale, setChartScale] = useState({ min: 0, max: 100 });
 
     useEffect(() => {
         fetchAccountTransactions();
@@ -49,6 +54,7 @@ const AccountDetails = ({ route, navigation }) => {
             ) || [];
 
             setTransactions(accountTransactions.slice(0, 5)); // Show recent 5
+            calculateHistory(accountTransactions, account.balances.current);
         } catch (error) {
             console.error('Error fetching transactions:', error);
         } finally {
@@ -56,10 +62,91 @@ const AccountDetails = ({ route, navigation }) => {
         }
     };
 
+    const calculateHistory = (allTxs, currentBalance) => {
+        const sorted = [...allTxs].sort((a, b) => new Date(b.date) - new Date(a.date));
+        let runningBalance = currentBalance;
+        const history = [];
+
+        // Today
+        history.push({
+            value: runningBalance,
+            date: new Date(),
+        });
+
+        sorted.forEach(t => {
+            runningBalance += t.amount;
+            history.push({
+                value: runningBalance,
+                date: new Date(t.date),
+            });
+        });
+
+        const finalData = history.reverse().map(item => ({
+            value: item.value,
+            date: item.date,
+        }));
+
+        setOriginalChartData(finalData);
+        applyTimeFilter(finalData, '1M');
+    };
+
+    const applyTimeFilter = (data, filter) => {
+        setTimeFilter(filter);
+        if (!data || data.length === 0) return;
+
+        const now = new Date();
+        now.setHours(23, 59, 59, 999);
+        let cutoff = new Date();
+
+        if (filter === '1M') cutoff.setMonth(now.getMonth() - 1);
+        else if (filter === '3M') cutoff.setMonth(now.getMonth() - 3);
+        else if (filter === '6M') cutoff.setMonth(now.getMonth() - 6);
+        else if (filter === 'YTD') cutoff = new Date(now.getFullYear(), 0, 1);
+        else if (filter === '1Y') cutoff.setFullYear(now.getFullYear() - 1);
+        else if (filter === 'ALL') cutoff = new Date(0);
+
+        // Filter data points within range
+        const pointsInRange = data.filter(d => d.date >= cutoff || d === data[data.length - 1]);
+
+        // INTERPOLATION: Create a point for every single day to make the line look premium
+        const dailyPoints = [];
+        const iterDate = new Date(cutoff > data[0].date ? cutoff : data[0].date);
+        iterDate.setHours(0, 0, 0, 0);
+
+        while (iterDate <= now) {
+            // Find the balance for this day (the most recent point before or on this day)
+            const balanceAtDate = data.reduce((prev, curr) => {
+                return (curr.date <= iterDate) ? curr : prev;
+            }, data[0]);
+
+            dailyPoints.push({
+                value: balanceAtDate.value,
+                date: new Date(iterDate)
+            });
+            iterDate.setDate(iterDate.getDate() + 1);
+        }
+
+        if (dailyPoints.length > 0) {
+            const values = dailyPoints.map(d => d.value);
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const range = max - min;
+            const padding = range * 0.2 || 20; // 20% vertical padding
+
+            setChartScale({
+                min: min - padding,
+                max: max + padding
+            });
+            setChartData(dailyPoints.map(d => ({ value: d.value })));
+        } else {
+            setChartData([]);
+        }
+    };
+
     const TimeBtn = ({ label }) => (
         <TouchableOpacity
             style={[styles.timeBtn, timeFilter === label && styles.activeTimeBtn]}
-            onPress={() => setTimeFilter(label)}
+            onPress={() => applyTimeFilter(originalChartData, label)}
         >
             <Text style={[styles.timeBtnText, timeFilter === label && styles.activeTimeBtnText]}>
                 {label}
@@ -127,10 +214,46 @@ const AccountDetails = ({ route, navigation }) => {
                     <Text style={styles.balanceChange}>$0.00 (0%) 1 month</Text>
                 </View>
 
-                {/* Graph Placeholder */}
+                {/* Graph Container */}
                 <View style={styles.graphContainer}>
                     <View style={styles.graphBox}>
-                        <Text style={styles.graphPlaceholderText}>[Graph Placeholder]</Text>
+                        {chartData.length > 0 ? (
+                            <LineChart
+                                data={chartData}
+                                height={100}
+                                width={width - 48} // Match padding
+                                initialSpacing={0}
+                                endSpacing={0}
+                                spacing={(width - 48) / (chartData.length > 1 ? chartData.length - 1 : 1)}
+                                color="#2563EB"
+                                thickness={2.5}
+                                hideDataPoints
+                                hideRules
+                                hideYAxisText
+                                hideAxesAndRules
+                                curved
+                                curvature={0.15} // Reduced to prevent overshoot
+                                yAxisOffset={chartScale.min}
+                                maxValue={chartScale.max - chartScale.min}
+                                areaChart
+                                startFillColor="#3B82F6"
+                                startOpacity={0.4}
+                                endFillColor="#3B82F6"
+                                endOpacity={0.01}
+                                isAnimated
+                                animationDuration={800}
+                                // Interactive features
+                                pointerConfig={{
+                                    pointerStripColor: '#2563EB',
+                                    pointerStripWidth: 1,
+                                    pointerColor: '#2563EB',
+                                    radius: 4,
+                                    pointerLabelComponent: items => null, // Just the line for now
+                                }}
+                            />
+                        ) : (
+                            <ActivityIndicator size="small" color="#6366F1" />
+                        )}
                     </View>
                     <View style={styles.timeFilterRow}>
                         <TimeBtn label="1M" />
@@ -276,8 +399,9 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         borderWidth: 1,
         borderColor: '#D1E9FF',
-        justifyContent: 'center',
+        justifyContent: 'flex-end',
         alignItems: 'center',
+        overflow: 'hidden',
     },
     graphPlaceholderText: {
         color: '#93C5FD',

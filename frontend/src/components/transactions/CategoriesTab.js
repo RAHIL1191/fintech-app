@@ -38,7 +38,7 @@ const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing })
         // 1. Filter by Month/Year AND exclude transfers
         const filteredByDate = transactions.filter(t => {
             if (t.is_transfer) return false;
-            const tDate = new Date(t.date);
+            const tDate = new Date(t.date + 'T12:00:00');
             return (
                 tDate.getMonth() === selectedDate.getMonth() &&
                 tDate.getFullYear() === selectedDate.getFullYear()
@@ -170,10 +170,12 @@ const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing })
                                         <TouchableOpacity
                                             key={t.transaction_id || tIdx}
                                             style={styles.transactionRow}
-                                            onPress={() => navigation.navigate('EditTransaction', { transaction: t, mode: 'edit' })}
+                                            onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
                                         >
                                             <View style={styles.tInfo}>
-                                                <Text style={styles.tName} numberOfLines={1}>{t.name}</Text>
+                                                <Text style={styles.tName} numberOfLines={1}>
+                                                    {t.personal_finance_category?.primary || t.category?.[0] || 'Uncategorized'}
+                                                </Text>
                                                 <Text style={styles.tDate}>{t.date}</Text>
                                             </View>
                                             <Text style={styles.tAmount}>

@@ -112,6 +112,46 @@ const Accounts = ({ navigation }) => {
         fetchAccounts(token);
     };
 
+    const removeItem = async (itemId) => {
+        Alert.alert(
+            "Remove Connection",
+            "Are you sure you want to remove this bank connection? This will stop all tracking and remove accounts from your view. You can add it back anytime.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Remove",
+                    style: "destructive",
+                    onPress: async () => {
+                        setLoading(true);
+                        try {
+                            await api.post('/item/delete', { item_id: itemId });
+                            Alert.alert("Success", "Connection removed.");
+                            fetchAccounts();
+                        } catch (error) {
+                            console.error('Delete failed:', error);
+                            Alert.alert("Error", "Failed to remove connection.");
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleItemOptions = (itemId) => {
+        if (!itemId) return;
+        Alert.alert(
+            "Connection Options",
+            "What would you like to do with this connection?",
+            [
+                { text: "Update Connection (Relink)", onPress: () => repairConnection(itemId) },
+                { text: "Remove Connection", onPress: () => removeItem(itemId), style: "destructive" },
+                { text: "Cancel", style: "cancel" }
+            ]
+        );
+    };
+
     const repairConnection = async (itemId) => {
         if (!itemId) return;
         setLoading(true);
@@ -127,9 +167,9 @@ const Accounts = ({ navigation }) => {
                 token: linkToken,
                 onSuccess: (success) => {
                     console.log('Update Mode Success:', success);
-                    Alert.alert('Success', 'Connection repaired! refreshing...');
-                    // Reload data
-                    fetchAccounts();
+                    Alert.alert('Success', 'Connection updated. syncing latest data...');
+                    // Reload data with force sync
+                    fetchAccounts(null, true);
                 },
                 onExit: (exit) => {
                     console.log('Update Mode Exited:', exit);
@@ -179,7 +219,11 @@ const Accounts = ({ navigation }) => {
 
     // Group filtered accounts by institution
     const groupedAccounts = filteredAccounts.reduce((groups, account) => {
-        const institutionName = account.institution_name || 'Bank Account';
+        let institutionName = account.institution_name || 'Bank Account';
+        if (institutionName === 'BMO Bank of Montreal') {
+            institutionName = 'BMO';
+        }
+
         if (!groups[institutionName]) {
             groups[institutionName] = [];
         }
@@ -238,9 +282,6 @@ const Accounts = ({ navigation }) => {
                 <TouchableOpacity><Menu size={24} color="#1A1A1A" /></TouchableOpacity>
                 <Text style={styles.toolbarTitle}>Accounts</Text>
                 <View style={styles.toolbarRight}>
-                    <TouchableOpacity style={styles.toolbarIcon}><Bell size={24} color="#F59E0B" /></TouchableOpacity>
-                    <TouchableOpacity style={styles.toolbarIcon}><MoreVertical size={24} color="#666" /></TouchableOpacity>
-                    <TouchableOpacity style={styles.toolbarIcon}><Plus size={24} color="#1A1A1A" /></TouchableOpacity>
                 </View>
             </View>
 
@@ -340,7 +381,7 @@ const Accounts = ({ navigation }) => {
                                         </View>
 
                                         <TouchableOpacity
-                                            onPress={() => repairConnection(itemId)}
+                                            onPress={() => handleItemOptions(itemId)}
                                             style={styles.settingsBtn}
                                         >
                                             <MoreVertical size={20} color="#64748B" />
@@ -403,11 +444,11 @@ const styles = StyleSheet.create({
     },
     toolbarTitle: {
         flex: 1,
-        textAlign: 'center',
-        fontSize: 18,
-        fontWeight: '700',
+        textAlign: 'left',
+        fontSize: 28,
+        fontWeight: '800',
         color: '#1A1A1A',
-        marginLeft: 40,
+        marginLeft: 10,
     },
     toolbarRight: {
         flexDirection: 'row',

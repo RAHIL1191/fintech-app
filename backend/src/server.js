@@ -162,6 +162,43 @@ app.post('/api/exchange_public_token', async (req, res) => {
     }
 });
 
+// Delete Plaid Item
+app.post('/api/item/delete', async (req, res) => {
+    const { item_id } = req.body;
+    if (!item_id) {
+        return res.status(400).json({ error: 'Missing item_id' });
+    }
+
+    try {
+        console.log(`Request to delete item: ${item_id}`);
+
+        // 1. Get access token to call Plaid
+        const items = await db.getAllPlaidItems();
+        const item = items.find(i => i.item_id === item_id);
+
+        if (item) {
+            try {
+                // Call Plaid to remove (Stop Billing)
+                await client.itemRemove({ access_token: item.access_token });
+                console.log(`Plaid API: Item ${item_id} removed successfully.`);
+            } catch (plaidErr) {
+                // Ignore if already removed or invalid, valid to proceed with local cleanup
+                console.warn(`Plaid API Remove Warning: ${plaidErr.message}`);
+            }
+        } else {
+            console.warn(`Item ${item_id} not found locally, proceeding to delete any residuals.`);
+        }
+
+        // 2. Delete from DB (Items, Accounts, Transactions)
+        await db.deletePlaidItem(item_id);
+
+        res.json({ success: true, message: 'Item deleted' });
+    } catch (error) {
+        console.error('Error deleting item:', error);
+        res.status(500).json({ error: 'Failed to delete item' });
+    }
+});
+
 // Fetch Transactions
 app.get('/api/transactions', async (req, res) => {
     const { sync } = req.query;
@@ -211,9 +248,25 @@ app.get('/api/transactions', async (req, res) => {
             allTransactions = await db.getCachedTransactions(itemIds);
         }
 
-        // 3. Merge with local overrides (metadata) and Merchant Rules
+        // 3. Merge with local overrides (metadata), Merchant Rules, and ADD Manual Transactions
         const metadata = await db.getTransactionMetadataMap();
         const merchantRules = await db.getMerchantMetadataMap();
+        const manualTransactions = await db.getManualTransactions();
+
+        // Map manual transactions to the standard format
+        const mappedManual = manualTransactions.map(t => {
+            const finalCategory = t.category || 'General';
+            return {
+                ...t,
+                transaction_id: t.transaction_id,
+                personal_finance_category: { primary: finalCategory },
+                category: [finalCategory],
+                is_manual: true,
+                created_at: t.created_at,
+                updated_at: t.updated_at,
+                device_info: t.device_info || 'Manual Entry'
+            };
+        });
 
         const mergedTransactions = allTransactions.map(t => {
             const txOverride = metadata[t.transaction_id] || {};
@@ -249,17 +302,21 @@ app.get('/api/transactions', async (req, res) => {
                 name: txOverride.merchant_name || t.name,
                 account_id: txOverride.account_id || t.account_id,
                 date: txOverride.date || t.date,
+                time: txOverride.time || null,
                 note: txOverride.note || t.note,
                 recurring_frequency: txOverride.recurring_frequency || t.recurring_frequency,
                 is_transfer: txOverride.is_transfer !== undefined
                     ? !!txOverride.is_transfer
-                    : (merchantOverride.is_transfer === 1 ? true : (t.is_transfer || false))
+                    : (merchantOverride.is_transfer === 1 ? true : (t.is_transfer || false)),
+                created_at: txOverride.created_at || t.updated_at || new Date().toISOString(),
+                updated_at: txOverride.updated_at || t.updated_at || new Date().toISOString(),
+                device_info: txOverride.device_info || 'Plaid Sync'
             };
         });
 
         res.json({
-            transactions: mergedTransactions,
-            total_transactions: mergedTransactions.length
+            transactions: [...mappedManual, ...mergedTransactions],
+            total_transactions: mappedManual.length + mergedTransactions.length
         });
 
     } catch (error) {
@@ -395,6 +452,35 @@ app.post('/api/merchants/apply-rule', async (req, res) => {
         const errorMsg = error.message || error.toString();
         logToFile(`Error applying merchant rule for ${merchant_name}: ${errorMsg}`);
         res.status(500).json({ error: 'Failed to apply merchant rule', details: errorMsg });
+    }
+});
+
+// Create or Update Manual Transaction
+app.post('/api/transactions', async (req, res) => {
+    const data = req.body;
+    try {
+        const id = data.transaction_id || `manual_${Date.now()}`;
+        if (data.transaction_id) {
+            await db.updateManualTransaction(id, data);
+        } else {
+            await db.addManualTransaction(id, data);
+        }
+        res.json({ status: 'success', transaction_id: id });
+    } catch (error) {
+        console.error('Failed to save manual transaction:', error);
+        res.status(500).json({ error: 'Failed to save transaction' });
+    }
+});
+
+// Delete Transaction (Manual Only)
+app.delete('/api/transactions/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.deleteManualTransaction(id);
+        res.json({ status: 'success' });
+    } catch (error) {
+        console.error('Failed to delete transaction:', error);
+        res.status(500).json({ error: 'Failed to delete transaction' });
     }
 });
 

@@ -36,13 +36,13 @@ const TransfersTab = ({ transactions = [], navigation, onRefresh, refreshing }) 
             {sortedDates.map((date) => (
                 <View key={date} style={styles.dateGroup}>
                     <Text style={styles.dateHeader}>
-                        {new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                        {new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                     </Text>
                     {grouped[date].map((t, idx) => (
                         <TouchableOpacity
                             key={t.transaction_id || idx}
                             style={styles.transactionRow}
-                            onPress={() => navigation.navigate('EditTransaction', { transaction: t, mode: 'edit' })}
+                            onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
                         >
                             <View style={[styles.iconCircle, { backgroundColor: '#6366F1' }]}>
                                 <Repeat size={20} color="#FFF" />

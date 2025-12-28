@@ -321,7 +321,11 @@ const AccountTransactions = ({ route, navigation }) => {
                         <View key={date}>
                             <Text style={styles.dateHeader}>{date}</Text>
                             {items.map(item => (
-                                <TouchableOpacity key={item.transaction_id} style={styles.transactionItem}>
+                                <TouchableOpacity
+                                    key={item.transaction_id}
+                                    style={styles.transactionItem}
+                                    onPress={() => navigation.navigate('TransactionDetails', { transaction: item })}
+                                >
                                     <View style={styles.iconContainer}>
                                         <CreditCard size={18} color="#FFF" />
                                     </View>

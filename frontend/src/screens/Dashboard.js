@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Wallet, ArrowUpRight, ArrowDownLeft, Plus, CreditCard, PieChart } from 'lucide-react-native';
@@ -6,6 +7,7 @@ import PlaidLink from '../components/PlaidLink';
 import api from '../config/api';
 
 const Dashboard = () => {
+    const navigation = useNavigation();
     const [loading, setLoading] = useState(false);
     const [accessToken, setAccessToken] = useState(null);
     const [balance, setBalance] = useState({ total: '0.00', income: '0.00', expenses: '0.00' });
@@ -29,6 +31,7 @@ const Dashboard = () => {
 
             const plaidTransactions = response.data.transactions || [];
             const formattedTxs = plaidTransactions.map(tx => ({
+                ...tx, // Preserve raw data for TransactionDetails
                 id: tx.transaction_id,
                 title: tx.name,
                 amount: `${tx.amount < 0 ? '+' : '-'}$${Math.abs(tx.amount).toFixed(2)}`,
@@ -56,6 +59,10 @@ const Dashboard = () => {
         console.log('Successfully linked account! Access Token received.');
         fetchDashboardData(token);
     };
+
+    useEffect(() => {
+        fetchDashboardData();
+    }, []);
 
     return (
         <View style={styles.container}>
@@ -147,7 +154,11 @@ const Dashboard = () => {
                     </View>
                 ) : (
                     transactions.map((tx) => (
-                        <View key={tx.id} style={styles.transactionItem}>
+                        <TouchableOpacity
+                            key={tx.id}
+                            style={styles.transactionItem}
+                            onPress={() => navigation.navigate('TransactionDetails', { transaction: tx })}
+                        >
                             <View style={styles.txIcon}>
                                 <Wallet size={20} color="#666" />
                             </View>
@@ -161,7 +172,7 @@ const Dashboard = () => {
                                 </Text>
                                 <Text style={styles.txDate}>{tx.date}</Text>
                             </View>
-                        </View>
+                        </TouchableOpacity>
                     ))
                 )}
             </ScrollView>

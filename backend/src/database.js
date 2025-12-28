@@ -76,7 +76,18 @@ class DatabaseManager {
         await addColumn('transaction_metadata', 'date', 'TEXT');
         await addColumn('transaction_metadata', 'recurring_frequency', 'TEXT');
         await addColumn('transaction_metadata', 'is_transfer', 'INTEGER', 0);
-        await addColumn('merchant_metadata', 'is_transfer', 'INTEGER', 0);
+        await addColumn('transaction_metadata', 'time', 'TEXT');
+        await addColumn('transaction_metadata', 'device_info', 'TEXT');
+        await addColumn('transaction_metadata', 'splits', 'TEXT'); // Store as JSON string
+        await addColumn('transaction_metadata', 'created_at', 'TIMESTAMP', 'CURRENT_TIMESTAMP');
+        if (this.isPostgres) {
+            try {
+                await this.run('ALTER TABLE transaction_metadata ALTER COLUMN created_at TYPE TIMESTAMPTZ');
+                await this.run('ALTER TABLE transaction_metadata ALTER COLUMN updated_at TYPE TIMESTAMPTZ');
+                await this.run('ALTER TABLE manual_transactions ALTER COLUMN created_at TYPE TIMESTAMPTZ');
+                await this.run('ALTER TABLE manual_transactions ALTER COLUMN updated_at TYPE TIMESTAMPTZ');
+            } catch (e) { /* ignore */ }
+        }
     }
 
     async createTables() {
@@ -88,10 +99,14 @@ class DatabaseManager {
                 merchant_name TEXT,
                 account_id TEXT,
                 date TEXT,
+                time TEXT,
                 note TEXT,
                 recurring_frequency TEXT,
                 is_transfer ${this.isPostgres ? 'INTEGER' : 'INTEGER'} DEFAULT 0,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                device_info TEXT,
+                splits TEXT,
+                created_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP,
+                updated_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP
             )`,
             // Account Metadata
             `CREATE TABLE IF NOT EXISTS account_metadata (
@@ -152,6 +167,24 @@ class DatabaseManager {
                 iso_currency_code TEXT,
                 item_id TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`,
+            // Manual Transactions
+            `CREATE TABLE IF NOT EXISTS manual_transactions(
+                transaction_id TEXT PRIMARY KEY,
+                account_id TEXT,
+                amount REAL,
+                date TEXT,
+                time TEXT,
+                name TEXT,
+                merchant_name TEXT,
+                category TEXT,
+                note TEXT,
+                recurring_frequency TEXT,
+                is_transfer INTEGER DEFAULT 0,
+                device_info TEXT,
+                splits TEXT,
+                created_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP,
+                updated_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP
             )`
         ];
 
@@ -205,7 +238,7 @@ class DatabaseManager {
     // Convert ? to $1, $2, etc for Postgres
     convertPlaceholders(sql) {
         let index = 1;
-        return sql.replace(/\?/g, () => `$${index++}`);
+        return sql.replace(/\?/g, () => `$${index++} `);
     }
 
     async seedCategories() {
@@ -240,7 +273,7 @@ class DatabaseManager {
         } else if (type === 'merchant') {
             return this.setMerchantMetadata(id, data);
         } else {
-            throw new Error(`Unsupported metadata type: ${type}`);
+            throw new Error(`Unsupported metadata type: ${type} `);
         }
     }
 
@@ -249,22 +282,22 @@ class DatabaseManager {
         let sql;
         if (this.isPostgres) {
             sql = `
-                INSERT INTO account_metadata (account_id, custom_name, is_hidden, updated_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO account_metadata(account_id, custom_name, is_hidden, updated_at)
+        VALUES(?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(account_id) DO UPDATE SET
-                    custom_name = EXCLUDED.custom_name,
-                    is_hidden = EXCLUDED.is_hidden,
-                    updated_at = CURRENT_TIMESTAMP
-            `;
+        custom_name = EXCLUDED.custom_name,
+            is_hidden = EXCLUDED.is_hidden,
+            updated_at = CURRENT_TIMESTAMP
+                `;
         } else {
             sql = `
-                INSERT INTO account_metadata (account_id, custom_name, is_hidden, updated_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO account_metadata(account_id, custom_name, is_hidden, updated_at)
+        VALUES(?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(account_id) DO UPDATE SET
-                    custom_name = COALESCE(?, custom_name),
-                    is_hidden = COALESCE(?, is_hidden),
-                    updated_at = CURRENT_TIMESTAMP
-            `;
+        custom_name = COALESCE(?, custom_name),
+            is_hidden = COALESCE(?, is_hidden),
+            updated_at = CURRENT_TIMESTAMP
+                `;
         }
         const params = this.isPostgres
             ? [id, custom_name, is_hidden]
@@ -280,26 +313,26 @@ class DatabaseManager {
         let sql;
         if (this.isPostgres) {
             sql = `
-                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, is_transfer, updated_at)
-                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+                INSERT INTO merchant_metadata(merchant_name, category, logo_url, is_favorite, is_transfer, updated_at)
+        VALUES($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
                 ON CONFLICT(merchant_name) DO UPDATE SET
-                    category = COALESCE(EXCLUDED.category, merchant_metadata.category),
-                    logo_url = COALESCE(EXCLUDED.logo_url, merchant_metadata.logo_url),
-                    is_favorite = COALESCE(EXCLUDED.is_favorite, merchant_metadata.is_favorite),
-                    is_transfer = COALESCE(EXCLUDED.is_transfer, merchant_metadata.is_transfer),
-                    updated_at = CURRENT_TIMESTAMP
-            `;
+        category = COALESCE(EXCLUDED.category, merchant_metadata.category),
+            logo_url = COALESCE(EXCLUDED.logo_url, merchant_metadata.logo_url),
+            is_favorite = COALESCE(EXCLUDED.is_favorite, merchant_metadata.is_favorite),
+            is_transfer = COALESCE(EXCLUDED.is_transfer, merchant_metadata.is_transfer),
+            updated_at = CURRENT_TIMESTAMP
+                `;
         } else {
             sql = `
-                INSERT INTO merchant_metadata (merchant_name, category, logo_url, is_favorite, is_transfer, updated_at)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO merchant_metadata(merchant_name, category, logo_url, is_favorite, is_transfer, updated_at)
+        VALUES(?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(merchant_name) DO UPDATE SET
-                    category = COALESCE(excluded.category, merchant_metadata.category),
-                    logo_url = COALESCE(excluded.logo_url, merchant_metadata.logo_url),
-                    is_favorite = COALESCE(excluded.is_favorite, merchant_metadata.is_favorite),
-                    is_transfer = COALESCE(excluded.is_transfer, merchant_metadata.is_transfer),
-                    updated_at = CURRENT_TIMESTAMP
-            `;
+        category = COALESCE(excluded.category, merchant_metadata.category),
+            logo_url = COALESCE(excluded.logo_url, merchant_metadata.logo_url),
+            is_favorite = COALESCE(excluded.is_favorite, merchant_metadata.is_favorite),
+            is_transfer = COALESCE(excluded.is_transfer, merchant_metadata.is_transfer),
+            updated_at = CURRENT_TIMESTAMP
+                `;
         }
         // Save for BOTH exact name AND cleaned name to be safe
         await this.run(sql, [name, category, logo_url, is_favorite, is_transfer]);
@@ -323,7 +356,7 @@ class DatabaseManager {
         // Find IDs of transactions that look like this merchant
         const findSql = this.isPostgres
             ? `SELECT transaction_id FROM cached_transactions WHERE merchant_name = $1 OR merchant_name = $2 OR name = $1 OR name = $2`
-            : `SELECT transaction_id FROM cached_transactions WHERE merchant_name = ? OR merchant_name = ? OR name = ? OR name = ?`;
+            : `SELECT transaction_id FROM cached_transactions WHERE merchant_name = ? OR merchant_name = ? OR name = ? OR name = ? `;
 
         const rows = await this.all(findSql, [exactName, cleaned]);
 
@@ -341,7 +374,7 @@ class DatabaseManager {
     }
 
     async setTransactionMetadata(id, data) {
-        const { category, merchant_name, account_id, date, note, recurring_frequency, is_transfer } = data;
+        const { category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splits } = data;
 
         // Dynamic Categorization: If a category is set for a transaction, 
         // also set it as the default for this merchant name globally.
@@ -352,37 +385,45 @@ class DatabaseManager {
         let sql;
         if (this.isPostgres) {
             sql = `
-                INSERT INTO transaction_metadata (transaction_id, category, merchant_name, account_id, date, note, recurring_frequency, is_transfer, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+                INSERT INTO transaction_metadata(transaction_id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splits, created_at, updated_at)
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 ON CONFLICT(transaction_id) DO UPDATE SET
-                    category = COALESCE(EXCLUDED.category, transaction_metadata.category),
-                    merchant_name = COALESCE(EXCLUDED.merchant_name, transaction_metadata.merchant_name),
-                    account_id = COALESCE(EXCLUDED.account_id, transaction_metadata.account_id),
-                    date = COALESCE(EXCLUDED.date, transaction_metadata.date),
-                    note = COALESCE(EXCLUDED.note, transaction_metadata.note),
-                    recurring_frequency = COALESCE(EXCLUDED.recurring_frequency, transaction_metadata.recurring_frequency),
-                    is_transfer = COALESCE(EXCLUDED.is_transfer, transaction_metadata.is_transfer),
-                    updated_at = CURRENT_TIMESTAMP
-            `;
+        category = COALESCE(EXCLUDED.category, transaction_metadata.category),
+            merchant_name = COALESCE(EXCLUDED.merchant_name, transaction_metadata.merchant_name),
+            account_id = COALESCE(EXCLUDED.account_id, transaction_metadata.account_id),
+            date = COALESCE(EXCLUDED.date, transaction_metadata.date),
+            time = COALESCE(EXCLUDED.time, transaction_metadata.time),
+            note = COALESCE(EXCLUDED.note, transaction_metadata.note),
+            recurring_frequency = COALESCE(EXCLUDED.recurring_frequency, transaction_metadata.recurring_frequency),
+            is_transfer = COALESCE(EXCLUDED.is_transfer, transaction_metadata.is_transfer),
+            device_info = COALESCE(EXCLUDED.device_info, transaction_metadata.device_info),
+            splits = COALESCE(EXCLUDED.splits, transaction_metadata.splits),
+            updated_at = EXCLUDED.updated_at
+                `;
         } else {
             sql = `
-                INSERT INTO transaction_metadata (transaction_id, category, merchant_name, account_id, date, note, recurring_frequency, is_transfer, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO transaction_metadata(transaction_id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splits, created_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(transaction_id) DO UPDATE SET
-                    category = COALESCE(?, category),
-                    merchant_name = COALESCE(?, merchant_name),
-                    account_id = COALESCE(?, account_id),
-                    date = COALESCE(?, date),
-                    note = COALESCE(?, note),
-                    recurring_frequency = COALESCE(?, recurring_frequency),
-                    is_transfer = COALESCE(?, is_transfer),
-                    updated_at = CURRENT_TIMESTAMP
-            `;
+        category = COALESCE(?, category),
+            merchant_name = COALESCE(?, merchant_name),
+            account_id = COALESCE(?, account_id),
+            date = COALESCE(?, date),
+            time = COALESCE(?, time),
+            note = COALESCE(?, note),
+            recurring_frequency = COALESCE(?, recurring_frequency),
+            is_transfer = COALESCE(?, is_transfer),
+            device_info = COALESCE(?, device_info),
+            splits = COALESCE(?, splits),
+            updated_at = ?
+                `;
         }
 
+        const now = new Date().toISOString();
+        const splitsJson = splits ? (typeof splits === 'string' ? splits : JSON.stringify(splits)) : null;
         const params = this.isPostgres
-            ? [id, category, merchant_name, account_id, date, note, recurring_frequency, is_transfer]
-            : [id, category, merchant_name, account_id, date, note, recurring_frequency, is_transfer, category, merchant_name, account_id, date, note, recurring_frequency, is_transfer];
+            ? [id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splitsJson, now, now]
+            : [id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splitsJson, now, now, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splitsJson, now, id];
 
         await this.run(sql, params);
     }
@@ -476,22 +517,22 @@ class DatabaseManager {
         let sql;
         if (this.isPostgres) {
             sql = `
-                INSERT INTO plaid_items (item_id, access_token, institution_name, created_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO plaid_items(item_id, access_token, institution_name, created_at)
+        VALUES(?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(item_id) DO UPDATE SET
-                    access_token = EXCLUDED.access_token,
-                    institution_name = COALESCE(EXCLUDED.institution_name, plaid_items.institution_name),
-                    created_at = CURRENT_TIMESTAMP
-            `;
+        access_token = EXCLUDED.access_token,
+            institution_name = COALESCE(EXCLUDED.institution_name, plaid_items.institution_name),
+            created_at = CURRENT_TIMESTAMP
+                `;
         } else {
             sql = `
-                INSERT INTO plaid_items (item_id, access_token, institution_name, created_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO plaid_items(item_id, access_token, institution_name, created_at)
+        VALUES(?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(item_id) DO UPDATE SET
-                    access_token = excluded.access_token,
-                    institution_name = COALESCE(excluded.institution_name, plaid_items.institution_name),
-                    created_at = CURRENT_TIMESTAMP
-            `;
+        access_token = excluded.access_token,
+            institution_name = COALESCE(excluded.institution_name, plaid_items.institution_name),
+            created_at = CURRENT_TIMESTAMP
+                `;
         }
         await this.run(sql, [itemId, accessToken, institutionName]);
     }
@@ -500,32 +541,56 @@ class DatabaseManager {
         return this.all('SELECT * FROM plaid_items');
     }
 
+    async deletePlaidItem(itemId) {
+        if (!this.pool && !this.db) await this.init();
+
+        // 1. Delete transactions associated with this item
+        const txDeleteSql = this.isPostgres
+            ? 'DELETE FROM cached_transactions WHERE item_id = $1'
+            : 'DELETE FROM cached_transactions WHERE item_id = ?';
+        await this.run(txDeleteSql, [itemId]);
+
+        // 2. Delete accounts associated with this item
+        const accDeleteSql = this.isPostgres
+            ? 'DELETE FROM cached_accounts WHERE item_id = $1'
+            : 'DELETE FROM cached_accounts WHERE item_id = ?';
+        await this.run(accDeleteSql, [itemId]);
+
+        // 3. Delete the item itself
+        const itemDeleteSql = this.isPostgres
+            ? 'DELETE FROM plaid_items WHERE item_id = $1'
+            : 'DELETE FROM plaid_items WHERE item_id = ?';
+        await this.run(itemDeleteSql, [itemId]);
+
+        console.log(`Deleted Plaid Item ${itemId} and all associated data.`);
+    }
+
     async upsertAccounts(accounts, itemId) {
         for (const acc of accounts) {
             let sql;
             if (this.isPostgres) {
                 sql = `
-                    INSERT INTO cached_accounts (
-                        account_id, item_id, name, mask, official_name, type, subtype, 
-                        current_balance, iso_currency_code, last_updated_datetime, updated_at
-                    )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+                    INSERT INTO cached_accounts(
+                    account_id, item_id, name, mask, official_name, type, subtype,
+                    current_balance, iso_currency_code, last_updated_datetime, updated_at
+                )
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
                     ON CONFLICT(account_id) DO UPDATE SET
-                        current_balance = EXCLUDED.current_balance,
-                        last_updated_datetime = EXCLUDED.last_updated_datetime,
-                        updated_at = CURRENT_TIMESTAMP
+        current_balance = EXCLUDED.current_balance,
+            last_updated_datetime = EXCLUDED.last_updated_datetime,
+            updated_at = CURRENT_TIMESTAMP
                 `;
             } else {
                 sql = `
-                    INSERT INTO cached_accounts (
-                        account_id, item_id, name, mask, official_name, type, subtype, 
-                        current_balance, iso_currency_code, last_updated_datetime, updated_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO cached_accounts(
+                    account_id, item_id, name, mask, official_name, type, subtype,
+                    current_balance, iso_currency_code, last_updated_datetime, updated_at
+                )
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(account_id) DO UPDATE SET
-                        current_balance = excluded.current_balance,
-                        last_updated_datetime = excluded.last_updated_datetime,
-                        updated_at = CURRENT_TIMESTAMP
+        current_balance = excluded.current_balance,
+            last_updated_datetime = excluded.last_updated_datetime,
+            updated_at = CURRENT_TIMESTAMP
                 `;
             }
             await this.run(sql, [
@@ -547,10 +612,10 @@ class DatabaseManager {
         if (!this.pool && !this.db) await this.init();
         const rows = await this.all(`
             SELECT DISTINCT merchant_name as name FROM transaction_metadata WHERE merchant_name IS NOT NULL
-            UNION
+        UNION
             SELECT DISTINCT name FROM cached_transactions WHERE merchant_name IS NULL
             ORDER BY name ASC
-        `);
+            `);
 
         // Use a Set to deduplicate cleaned names
         const seen = new Set();
@@ -594,31 +659,31 @@ class DatabaseManager {
             let sql;
             if (this.isPostgres) {
                 sql = `
-                    INSERT INTO cached_transactions (
-                        transaction_id, account_id, amount, date, name, merchant_name, 
-                        category, personal_finance_category, pending, iso_currency_code, item_id, updated_at
-                    )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+                    INSERT INTO cached_transactions(
+                transaction_id, account_id, amount, date, name, merchant_name,
+                category, personal_finance_category, pending, iso_currency_code, item_id, updated_at
+            )
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
                     ON CONFLICT(transaction_id) DO UPDATE SET
-                        amount = EXCLUDED.amount,
-                        pending = EXCLUDED.pending,
-                        category = EXCLUDED.category,
-                        personal_finance_category = EXCLUDED.personal_finance_category,
-                        updated_at = CURRENT_TIMESTAMP
+        amount = EXCLUDED.amount,
+            pending = EXCLUDED.pending,
+            category = EXCLUDED.category,
+            personal_finance_category = EXCLUDED.personal_finance_category,
+            updated_at = CURRENT_TIMESTAMP
                 `;
             } else {
                 sql = `
-                    INSERT INTO cached_transactions (
-                        transaction_id, account_id, amount, date, name, merchant_name, 
-                        category, personal_finance_category, pending, iso_currency_code, item_id, updated_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO cached_transactions(
+                    transaction_id, account_id, amount, date, name, merchant_name,
+                    category, personal_finance_category, pending, iso_currency_code, item_id, updated_at
+                )
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(transaction_id) DO UPDATE SET
-                        amount = excluded.amount,
-                        pending = excluded.pending,
-                        category = excluded.category,
-                        personal_finance_category = excluded.personal_finance_category,
-                        updated_at = CURRENT_TIMESTAMP
+        amount = excluded.amount,
+            pending = excluded.pending,
+            category = excluded.category,
+            personal_finance_category = excluded.personal_finance_category,
+            updated_at = CURRENT_TIMESTAMP
                 `;
             }
             await this.run(sql, [
@@ -664,8 +729,67 @@ class DatabaseManager {
             personal_finance_category: row.personal_finance_category ? JSON.parse(row.personal_finance_category) : null,
             pending: row.pending === 1,
             iso_currency_code: row.iso_currency_code,
-            item_id: row.item_id
+            item_id: row.item_id,
+            updated_at: row.updated_at
         }));
+    }
+
+    async addManualTransaction(id, data) {
+        const { account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splits } = data;
+        let sql;
+        const now = new Date().toISOString();
+        if (this.isPostgres) {
+            sql = `
+                INSERT INTO manual_transactions(
+                    transaction_id, account_id, amount, date, time, name, merchant_name,
+                    category, note, recurring_frequency, is_transfer, device_info, splits, created_at, updated_at
+                ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                    `;
+        } else {
+            sql = `
+                INSERT INTO manual_transactions(
+                        transaction_id, account_id, amount, date, time, name, merchant_name,
+                        category, note, recurring_frequency, is_transfer, device_info, splits, created_at, updated_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `;
+        }
+        const splitsJson = splits ? (typeof splits === 'string' ? splits : JSON.stringify(splits)) : null;
+        const params = [id, account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splitsJson, now, now];
+        return this.run(sql, params);
+    }
+
+    async updateManualTransaction(id, data) {
+        const { account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splits } = data;
+        const now = new Date().toISOString();
+        let sql;
+        if (this.isPostgres) {
+            sql = `
+                UPDATE manual_transactions SET
+        account_id = $2, amount = $3, date = $4, time = $5, name = $6, merchant_name = $7,
+            category = $8, note = $9, recurring_frequency = $10, is_transfer = $11, device_info = $12, splits = $13, updated_at = $14
+                WHERE transaction_id = $1
+            `;
+        } else {
+            sql = `
+                UPDATE manual_transactions SET
+        account_id = ?, amount = ?, date = ?, time = ?, name = ?, merchant_name = ?,
+            category = ?, note = ?, recurring_frequency = ?, is_transfer = ?, device_info = ?, splits = ?, updated_at = ?
+                WHERE transaction_id = ?
+            `;
+        }
+        const splitsJson = splits ? (typeof splits === 'string' ? splits : JSON.stringify(splits)) : null;
+        const params = this.isPostgres
+            ? [id, account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splitsJson, now]
+            : [account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splitsJson, now, id];
+        return this.run(sql, params);
+    }
+
+    async getManualTransactions() {
+        return this.all('SELECT * FROM manual_transactions ORDER BY date DESC');
+    }
+
+    async deleteManualTransaction(id) {
+        return this.run('DELETE FROM manual_transactions WHERE transaction_id = ?', [id]);
     }
 }
 
