@@ -2,42 +2,42 @@ export const CATEGORY_TAXONOMY = {
     "Food & Drink": {
         icon: "coffee",
         color: "#F59E0B", // Amber
-        subcategories: ["Groceries", "Restaurants", "Coffee", "Alcohol", "Fast Food", "Snacks", "Grocery"]
+        subcategories: ["Groceries", "Restaurants", "Coffee", "Alcohol", "Fast Food", "Snacks", "Grocery", "FOOD_AND_DRINK"]
     },
     "Shopping": {
         icon: "shopping-bag",
         color: "#EC4899", // Pink
-        subcategories: ["Clothing", "Electronics", "Home & Garden", "Beauty", "Kids", "Pets", "Gifts", "Laptop Purchase"]
+        subcategories: ["Clothing", "Electronics", "Home & Garden", "Beauty", "Kids", "Pets", "Gifts", "Laptop Purchase", "General Merchandise", "GENERAL_MERCHANDISE"]
     },
     "Housing": {
         icon: "home",
         color: "#3B82F6", // Blue
-        subcategories: ["Rent", "Mortgage", "Maintenance", "Furniture", "Utilities", "Services"]
+        subcategories: ["Rent", "Mortgage", "Maintenance", "Furniture", "Utilities", "Services", "Home Improvement", "HOME_IMPROVEMENT"]
     },
     "Transportation": {
         icon: "car",
         color: "#EF4444", // Red
-        subcategories: ["Fuel", "Public Transit", "Taxi/Uber", "Car Payment", "Insurance", "Repairs", "Parking", "Petrol", "License fees", "Parking fees"]
+        subcategories: ["Fuel", "Public Transit", "Taxi/Uber", "Car Payment", "Insurance", "Repairs", "Parking", "Petrol", "License fees", "Parking fees", "TRANSPORTATION", "Transport"]
     },
     "Entertainment": {
         icon: "film",
         color: "#8B5CF6", // Violet
-        subcategories: ["Movies", "Games", "Music", "Sports", "Events", "Hobbies", "Travel", "Recreational Stuff"]
+        subcategories: ["Movies", "Games", "Music", "Sports", "Events", "Hobbies", "Travel", "Recreational Stuff", "ENTERTAINMENT"]
     },
     "Financial": {
         icon: "dollar-sign",
         color: "#10B981", // Emerald
-        subcategories: ["Investments", "Taxes", "Insurance", "Fees", "Loan Payment", "Transfer", "Wise Withdrawal"]
+        subcategories: ["Investments", "Taxes", "Insurance", "Fees", "Loan Payment", "Transfer", "Wise Withdrawal", "Bank Fees", "BANK_FEES", "Loan Payments", "LOAN_PAYMENTS", "Transfer In", "TRANSFER_IN", "Transfer Out", "TRANSFER_OUT"]
     },
     "Health": {
         icon: "activity",
         color: "#14B8A6", // Teal
-        subcategories: ["Doctor", "Pharmacy", "Gym", "Therapy", "Dental", "Vision", "Massage"]
+        subcategories: ["Doctor", "Pharmacy", "Gym", "Therapy", "Dental", "Vision", "Massage", "MEDICAL", "Medical"]
     },
     "Bills & Utilities": {
         icon: "FileText",
         color: "#6366F1", // Indigo
-        subcategories: ["Phone", "Internet", "Water", "Electricity", "Gas", "Subscriptions", "Mobile Bill", "Internet home", "Subscription"]
+        subcategories: ["Phone", "Internet", "Water", "Electricity", "Gas", "Subscriptions", "Mobile Bill", "Internet home", "Subscription", "Rent And Utilities", "RENT_AND_UTILITIES"]
     },
     "Education": {
         icon: "book-open",
@@ -47,12 +47,12 @@ export const CATEGORY_TAXONOMY = {
     "Income": {
         icon: "trending-up",
         color: "#22C55E", // Green
-        subcategories: ["Salary", "Bonus", "Freelance", "Investment Return", "Gift", "Refund"]
+        subcategories: ["Salary", "Bonus", "Freelance", "Investment Return", "Gift", "Refund", "Bank Fees Refund", "INCOME"]
     },
     "Other": {
         icon: "more-horizontal",
         color: "#64748B", // Slate
-        subcategories: ["Charity", "Miscellaneous", "Unknown"]
+        subcategories: ["Charity", "Miscellaneous", "Unknown", "General Services", "GENERAL_SERVICES", "Government And Non Profit", "GOVERNMENT_AND_NON_PROFIT"]
     }
 };
 
