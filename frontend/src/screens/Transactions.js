@@ -14,7 +14,7 @@ import TransfersTab from '../components/transactions/TransfersTab';
 
 import TransactionFilterModal from '../components/TransactionFilterModal';
 
-const Transactions = ({ navigation }) => {
+const Transactions = ({ navigation, route }) => {
     const [transactions, setTransactions] = useState([]);
     const [filteredTransactions, setFilteredTransactions] = useState([]);
     const [accounts, setAccounts] = useState([]);
@@ -38,11 +38,31 @@ const Transactions = ({ navigation }) => {
     const scrollRef = useRef(null);
     const isFocused = useIsFocused();
 
+    // Track which tabs have been rendered to avoid mounting all at once
+    const [renderedTabs, setRenderedTabs] = useState(new Set(['CATEGORIES']));
+
     useEffect(() => {
-        if (isFocused) {
-            fetchData();
+        setRenderedTabs(prev => {
+            const next = new Set(prev);
+            if (!next.has(selectedTab)) {
+                next.add(selectedTab);
+                return next;
+            }
+            return prev;
+        });
+    }, [selectedTab]);
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    // Listen for explicit refresh requests (e.g. after adding a transaction)
+    useEffect(() => {
+        if (route.params?.refresh) {
+            fetchData(true);
+            navigation.setParams({ refresh: false });
         }
-    }, [isFocused]);
+    }, [route.params?.refresh]);
 
     // Re-apply filters when transactions or activeFilters change
     useEffect(() => {
@@ -50,17 +70,23 @@ const Transactions = ({ navigation }) => {
     }, [transactions, activeFilters]);
 
     const fetchData = async (forceSync = false) => {
+        console.log('fetchData called. forceSync:', forceSync);
         const params = {};
         if (forceSync || (typeof forceSync === 'object' && forceSync.nativeEvent)) {
             params.sync = 'true';
         }
 
-        if (transactions.length === 0) setLoading(true);
+        if (transactions.length === 0 || params.sync) {
+            console.log('Setting loading = true');
+            setLoading(true);
+        }
         try {
+            console.log('API Request starting with params:', params);
             const [txRes, accRes] = await Promise.all([
                 api.get('/transactions', { params }),
                 api.get('/accounts')
             ]);
+            console.log('API Request success. Tx count:', txRes.data.transactions?.length);
 
             setTransactions(txRes.data.transactions || []);
             setAccounts(accRes.data.accounts || []);
@@ -68,6 +94,7 @@ const Transactions = ({ navigation }) => {
             console.log('Fetching data error:', error.message);
             Alert.alert('Refresh Error', 'Failed to fetch the latest data.');
         } finally {
+            console.log('Setting loading = false');
             setLoading(false);
         }
     };
@@ -218,24 +245,33 @@ const Transactions = ({ navigation }) => {
                         onMomentumScrollEnd={handleScroll}
                         scrollEventThrottle={16}
                     >
-                        <View style={{ width }}>
-                            <CategoriesTab transactions={filteredTransactions} navigation={navigation} onRefresh={() => fetchData(true)} refreshing={loading} />
-                        </View>
-                        <View style={{ width }}>
-                            <MerchantsTab transactions={filteredTransactions} navigation={navigation} onRefresh={() => fetchData(true)} refreshing={loading} />
-                        </View>
-                        <View style={{ width }}>
-                            <DailyTab transactions={filteredTransactions} navigation={navigation} onRefresh={() => fetchData(true)} refreshing={loading} />
-                        </View>
-                        <View style={{ width }}>
-                            <MonthlyTab transactions={filteredTransactions} navigation={navigation} onRefresh={() => fetchData(true)} refreshing={loading} />
-                        </View>
-                        <View style={{ width }}>
-                            <RecurringTab transactions={filteredTransactions} navigation={navigation} onRefresh={() => fetchData(true)} refreshing={loading} />
-                        </View>
-                        <View style={{ width }}>
-                            <TransfersTab transactions={filteredTransactions} navigation={navigation} onRefresh={() => fetchData(true)} refreshing={loading} />
-                        </View>
+                        {/* Derive separate lists to ensure Transfers ONLY appear on Transfer tab */}
+                        {(() => {
+                            const nonTransferTransactions = filteredTransactions.filter(t => !t.is_transfer);
+                            const transferTransactions = filteredTransactions.filter(t => t.is_transfer);
+
+                            const renderTabContent = (TabComponent, tabName, data) => {
+                                if (!renderedTabs.has(tabName)) {
+                                    return <View style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator color="#0EA5E9" /></View>;
+                                }
+                                return (
+                                    <View style={{ width }}>
+                                        <TabComponent transactions={data} navigation={navigation} onRefresh={() => fetchData(true)} refreshing={loading} />
+                                    </View>
+                                );
+                            };
+
+                            return (
+                                <>
+                                    {renderTabContent(CategoriesTab, 'CATEGORIES', nonTransferTransactions)}
+                                    {renderTabContent(MerchantsTab, 'MERCHANTS', nonTransferTransactions)}
+                                    {renderTabContent(DailyTab, 'DAILY', nonTransferTransactions)}
+                                    {renderTabContent(MonthlyTab, 'MONTHLY', nonTransferTransactions)}
+                                    {renderTabContent(RecurringTab, 'RECURRING', nonTransferTransactions)}
+                                    {renderTabContent(TransfersTab, 'TRANSFERS', transferTransactions)}
+                                </>
+                            );
+                        })()}
                     </ScrollView>
                 )}
             </View>
@@ -248,7 +284,7 @@ const Transactions = ({ navigation }) => {
                 availableCategories={availableCategories}
                 availableAccounts={accounts}
             />
-        </SafeAreaView>
+        </SafeAreaView >
     );
 };
 

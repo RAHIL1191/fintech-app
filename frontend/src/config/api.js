@@ -5,7 +5,7 @@ import axios from 'axios';
 const PRODUCTION_URL = 'https://fintech-backend-psg5.onrender.com';
 
 // 2. Development URL (Local)
-const LOCAL_URL = 'http://192.168.2.19:8000';
+const LOCAL_URL = 'http://10.0.2.2:8000';
 
 // 3. Select automatically (or hardcode to PRODUCTION_URL for testing)
 const baseURL = (__DEV__ && !PRODUCTION_URL.includes('YOUR_BACKEND_URL'))
@@ -14,7 +14,7 @@ const baseURL = (__DEV__ && !PRODUCTION_URL.includes('YOUR_BACKEND_URL'))
 
 const api = axios.create({
     baseURL: `${baseURL}/api`,
-    timeout: 15000,
+    timeout: 60000,
 });
 
 export default api;

@@ -1,0 +1,1 @@
+Columns: ["id","bill_id","original_date","new_amount","note","is_skipped","created_at"]

@@ -80,6 +80,18 @@ class DatabaseManager {
         await addColumn('transaction_metadata', 'device_info', 'TEXT');
         await addColumn('transaction_metadata', 'splits', 'TEXT'); // Store as JSON string
         await addColumn('transaction_metadata', 'created_at', 'TIMESTAMP', 'CURRENT_TIMESTAMP');
+
+        // Ensure manual_transactions also has these columns
+        await addColumn('manual_transactions', 'splits', 'TEXT');
+        await addColumn('manual_transactions', 'device_info', 'TEXT');
+        await addColumn('manual_transactions', 'recurring_frequency', 'TEXT');
+
+        // Categories migration
+        await addColumn('categories', 'parent_category', 'TEXT');
+
+        // Account metadata migration
+        await addColumn('account_metadata', 'owner_name', 'TEXT');
+
         if (this.isPostgres) {
             try {
                 await this.run('ALTER TABLE transaction_metadata ALTER COLUMN created_at TYPE TIMESTAMPTZ');
@@ -112,6 +124,7 @@ class DatabaseManager {
             `CREATE TABLE IF NOT EXISTS account_metadata (
                 account_id TEXT PRIMARY KEY,
                 custom_name TEXT,
+                owner_name TEXT,
                 is_hidden INTEGER DEFAULT 0,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
@@ -128,6 +141,7 @@ class DatabaseManager {
             `CREATE TABLE IF NOT EXISTS categories (
                 id ${this.isPostgres ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${this.isPostgres ? '' : 'AUTOINCREMENT'},
                 name TEXT UNIQUE,
+                parent_category TEXT,
                 icon TEXT,
                 color TEXT,
                 is_custom INTEGER DEFAULT 0
@@ -183,6 +197,53 @@ class DatabaseManager {
                 is_transfer INTEGER DEFAULT 0,
                 device_info TEXT,
                 splits TEXT,
+                created_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP,
+                updated_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP
+            )`,
+            // Bills
+            `CREATE TABLE IF NOT EXISTS bills (
+                id ${this.isPostgres ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${this.isPostgres ? '' : 'AUTOINCREMENT'},
+                user_id INTEGER,
+                category TEXT NOT NULL,
+                description TEXT,
+                bill_number TEXT,
+                amount REAL NOT NULL,
+                account_id TEXT,
+                due_date TEXT NOT NULL,
+                recurrence_frequency TEXT NOT NULL,
+                reminder TEXT,
+                is_auto_paid INTEGER DEFAULT 0,
+                add_expense_entry INTEGER DEFAULT 1,
+                note TEXT,
+                is_active INTEGER DEFAULT 1,
+                created_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP,
+                updated_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP
+            )`,
+            // Bill Exceptions (For single occurrence overrides)
+            `CREATE TABLE IF NOT EXISTS bill_exceptions (
+                id ${this.isPostgres ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${this.isPostgres ? '' : 'AUTOINCREMENT'},
+                bill_id INTEGER NOT NULL,
+                original_date TEXT NOT NULL,
+                new_amount REAL,
+                note TEXT,
+                is_skipped INTEGER DEFAULT 0,
+                created_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(bill_id) REFERENCES bills(id)
+            )`,
+            // Budgets
+            `CREATE TABLE IF NOT EXISTS budgets (
+                id ${this.isPostgres ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${this.isPostgres ? '' : 'AUTOINCREMENT'},
+                name TEXT NOT NULL,
+                amount REAL NOT NULL,
+                type TEXT, -- 'Group' or 'Personal'
+                category_type TEXT, -- 'Expense' or 'Income'
+                recurrence_frequency TEXT,
+                start_date TEXT,
+                categories TEXT, -- JSON array
+                accounts TEXT, -- JSON array
+                is_rollover INTEGER DEFAULT 0,
+                alert_percent INTEGER DEFAULT 70,
+                is_active INTEGER DEFAULT 1,
                 created_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP,
                 updated_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP
             )`
@@ -278,30 +339,32 @@ class DatabaseManager {
     }
 
     async setAccountMetadata(id, data) {
-        const { custom_name, is_hidden } = data;
+        const { custom_name, owner_name, is_hidden } = data;
         let sql;
         if (this.isPostgres) {
             sql = `
-                INSERT INTO account_metadata(account_id, custom_name, is_hidden, updated_at)
-        VALUES(?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO account_metadata(account_id, custom_name, owner_name, is_hidden, updated_at)
+        VALUES(?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(account_id) DO UPDATE SET
         custom_name = EXCLUDED.custom_name,
+            owner_name = EXCLUDED.owner_name,
             is_hidden = EXCLUDED.is_hidden,
             updated_at = CURRENT_TIMESTAMP
                 `;
         } else {
             sql = `
-                INSERT INTO account_metadata(account_id, custom_name, is_hidden, updated_at)
-        VALUES(?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO account_metadata(account_id, custom_name, owner_name, is_hidden, updated_at)
+        VALUES(?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(account_id) DO UPDATE SET
         custom_name = COALESCE(?, custom_name),
+            owner_name = COALESCE(?, owner_name),
             is_hidden = COALESCE(?, is_hidden),
             updated_at = CURRENT_TIMESTAMP
                 `;
         }
         const params = this.isPostgres
-            ? [id, custom_name, is_hidden]
-            : [id, custom_name, is_hidden, custom_name, is_hidden];
+            ? [id, custom_name, owner_name, is_hidden]
+            : [id, custom_name, owner_name, is_hidden, custom_name, owner_name, is_hidden];
         await this.run(sql, params);
     }
 
@@ -565,6 +628,25 @@ class DatabaseManager {
         console.log(`Deleted Plaid Item ${itemId} and all associated data.`);
     }
 
+    async getAllAccounts() {
+        if (!this.pool && !this.db) await this.init();
+        let sql;
+        if (this.isPostgres) {
+            sql = `
+                SELECT a.*, am.custom_name, am.is_hidden
+                FROM accounts a
+                LEFT JOIN account_metadata am ON a.account_id = am.account_id
+            `;
+        } else {
+            sql = `
+                SELECT a.*, am.custom_name, am.is_hidden
+                FROM accounts a
+                LEFT JOIN account_metadata am ON a.account_id = am.account_id
+            `;
+        }
+        return this.all(sql);
+    }
+
     async upsertAccounts(accounts, itemId) {
         for (const acc of accounts) {
             let sql;
@@ -704,18 +786,27 @@ class DatabaseManager {
 
     async getCachedTransactions(itemIds = []) {
         if (!this.pool && !this.db) await this.init();
-        let sql = 'SELECT * FROM cached_transactions';
+        let sql = `
+            SELECT t.*, a.name as account_name, a.type as account_type, a.subtype as account_subtype, 
+                   a.official_name as account_official_name,
+                   am.owner_name as account_owner_name, am.custom_name as account_custom_name,
+                   p.institution_name
+            FROM cached_transactions t
+            LEFT JOIN cached_accounts a ON t.account_id = a.account_id
+            LEFT JOIN account_metadata am ON t.account_id = am.account_id
+            LEFT JOIN plaid_items p ON t.item_id = p.item_id
+        `;
         let params = [];
 
         if (itemIds.length > 0) {
             const placeholders = this.isPostgres
                 ? itemIds.map((_, i) => `$${i + 1}`).join(',')
                 : itemIds.map(() => '?').join(',');
-            sql += ` WHERE item_id IN (${placeholders})`;
+            sql += ` WHERE t.item_id IN (${placeholders})`;
             params = itemIds;
         }
 
-        sql += ' ORDER BY date DESC';
+        sql += ' ORDER BY t.date DESC';
         const rows = await this.all(sql, params);
 
         return rows.map(row => ({
@@ -730,7 +821,13 @@ class DatabaseManager {
             pending: row.pending === 1,
             iso_currency_code: row.iso_currency_code,
             item_id: row.item_id,
-            updated_at: row.updated_at
+            updated_at: row.updated_at,
+            account_name: row.account_custom_name || row.account_name,
+            account_type: row.account_type,
+            account_subtype: row.account_subtype,
+            account_official_name: row.account_official_name,
+            account_owner_name: row.account_owner_name,
+            institution_name: row.institution_name
         }));
     }
 
@@ -754,7 +851,25 @@ class DatabaseManager {
                         `;
         }
         const splitsJson = splits ? (typeof splits === 'string' ? splits : JSON.stringify(splits)) : null;
-        const params = [id, account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splitsJson, now, now];
+
+        // Ensure no undefined values for PG
+        const params = [
+            id,
+            account_id ?? null,
+            amount ?? 0,
+            date,
+            time ?? null,
+            name,
+            merchant_name ?? null,
+            category ?? null,
+            note ?? null,
+            recurring_frequency ?? null,
+            is_transfer ?? 0,
+            device_info ?? null,
+            splitsJson,
+            now,
+            now
+        ];
         return this.run(sql, params);
     }
 
@@ -778,18 +893,124 @@ class DatabaseManager {
             `;
         }
         const splitsJson = splits ? (typeof splits === 'string' ? splits : JSON.stringify(splits)) : null;
+
+        // Ensure no undefined values
+        const paramsValues = [
+            account_id ?? null,
+            amount ?? 0,
+            date,
+            time ?? null,
+            name,
+            merchant_name ?? null,
+            category ?? null,
+            note ?? null,
+            recurring_frequency ?? null,
+            is_transfer ?? 0,
+            device_info ?? null,
+            splitsJson,
+            now
+        ];
+
         const params = this.isPostgres
-            ? [id, account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splitsJson, now]
-            : [account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splitsJson, now, id];
+            ? [id, ...paramsValues] // PG: id is $1
+            : [...paramsValues, id]; // SQLite: id is last
+
         return this.run(sql, params);
     }
 
     async getManualTransactions() {
-        return this.all('SELECT * FROM manual_transactions ORDER BY date DESC');
+        const sql = `
+            SELECT t.*, a.name as account_name, a.type as account_type
+            FROM manual_transactions t
+            LEFT JOIN cached_accounts a ON t.account_id = a.account_id
+            ORDER BY t.date DESC
+        `;
+        return this.all(sql);
+    }
+
+    async getManualTransaction(id) {
+        const sql = `
+            SELECT t.*, a.name as account_name
+            FROM manual_transactions t
+            LEFT JOIN cached_accounts a ON t.account_id = a.account_id
+            WHERE t.transaction_id = ?
+        `;
+        const pgSql = `
+            SELECT t.*, a.name as account_name
+            FROM manual_transactions t
+            LEFT JOIN cached_accounts a ON t.account_id = a.account_id
+            WHERE t.transaction_id = $1
+        `;
+        if (this.isPostgres) {
+            const rows = await this.all(pgSql, [id]);
+            return rows[0];
+        }
+        return this.get(sql, [id]);
+    }
+
+    // Proxy to underlying get/all depending on DB
+    async get(sql, params = []) {
+        if (this.isPostgres) {
+            const rows = await this.all(sql, params);
+            return rows[0];
+        } else {
+            return this.db.get(sql, params);
+        }
     }
 
     async deleteManualTransaction(id) {
         return this.run('DELETE FROM manual_transactions WHERE transaction_id = ?', [id]);
+    }
+    async addCategory(name, parentCategory, color, icon) {
+        const sql = `
+            INSERT INTO categories (name, parent_category, color, icon, is_custom)
+            VALUES (?, ?, ?, ?, 1)
+            ON CONFLICT(name) DO UPDATE SET
+                parent_category = excluded.parent_category,
+                color = excluded.color,
+                icon = excluded.icon
+        `;
+        const params = [name, parentCategory || null, color, icon];
+        if (this.isPostgres) {
+            const pgSql = `
+                INSERT INTO categories (name, parent_category, color, icon, is_custom)
+                VALUES ($1, $2, $3, $4, 1)
+                ON CONFLICT(name) DO UPDATE SET
+                    parent_category = EXCLUDED.parent_category,
+                    color = EXCLUDED.color,
+                    icon = EXCLUDED.icon
+            `;
+            return this.run(pgSql, params);
+        }
+        return this.run(sql, params);
+    }
+
+    async getAllCategories() {
+        return this.all('SELECT * FROM categories ORDER BY name ASC');
+    }
+
+    async deleteCategory(name) {
+        const sql = 'DELETE FROM categories WHERE name = ?';
+        const pgSql = 'DELETE FROM categories WHERE name = $1';
+        if (this.isPostgres) {
+            return this.run(pgSql, [name]);
+        }
+        return this.run(sql, [name]);
+    }
+
+    async getPaidBills() {
+        // Fetch manual transactions that start with 'bill_pay_'
+        // These are transactions created explicitly from the Bills tab
+        const sql = `
+            SELECT t.*, a.name as account_name
+            FROM manual_transactions t
+            LEFT JOIN cached_accounts a ON t.account_id = a.account_id
+            WHERE t.transaction_id LIKE 'bill_pay_%'
+            ORDER BY t.date DESC
+        `;
+        // Note: For Postgres, LIKE is case-sensitive, which is fine here.
+        // If we needed standard SQL, 'bill_pay_%' works for both.
+        return this.all(sql);
     }
 }
 

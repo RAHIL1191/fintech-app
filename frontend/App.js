@@ -1,12 +1,12 @@
 import 'react-native-gesture-handler';
+console.log("!!! APP LAUNCHED !!!");
 import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createDrawerNavigator } from '@react-navigation/drawer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { LayoutDashboard, Receipt, List, BarChart3, Building2 } from 'lucide-react-native';
+import { LayoutDashboard, Receipt, BarChart3, Building2, PieChart } from 'lucide-react-native';
 
 // Screens - Restoring all
 import Dashboard from './src/screens/Dashboard';
@@ -20,10 +20,12 @@ import TransactionDetails from './src/screens/TransactionDetails';
 import CashFlow from './src/screens/CashFlow';
 import MerchantRules from './src/screens/MerchantRules';
 import AccountTransactions from './src/screens/AccountTransactions';
+import Insights from './src/screens/Insights';
+import BillDetails from './src/screens/BillDetails';
+import CreateBudget from './src/screens/CreateBudget';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
-const Drawer = createDrawerNavigator();
 const RootStack = createNativeStackNavigator();
 
 const AccountsStack = () => {
@@ -64,10 +66,10 @@ const MainTabs = () => {
                 }}
             />
             <Tab.Screen
-                name="Transactions"
-                component={Transactions}
+                name="Insights"
+                component={Insights}
                 options={{
-                    tabBarIcon: ({ color, size }) => <List size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <PieChart size={size} color={color} />,
                 }}
             />
             <Tab.Screen
@@ -88,37 +90,17 @@ const MainTabs = () => {
     );
 };
 
-const DrawerNavigator = () => {
-    return (
-        <Drawer.Navigator
-            screenOptions={{
-                headerShown: false,
-                drawerActiveTintColor: '#2563EB',
-                drawerInactiveTintColor: '#374151',
-                drawerLabelStyle: { fontSize: 16, fontWeight: '500' }
-            }}
-        >
-            <Drawer.Screen
-                name="MainTabs"
-                component={MainTabs}
-                options={{ title: 'Home' }}
-            />
-            <Drawer.Screen
-                name="MerchantRules"
-                component={MerchantRules}
-                options={{ title: 'Merchant Rules' }}
-            />
-        </Drawer.Navigator>
-    );
-};
-
 export default function App() {
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <SafeAreaProvider>
                 <NavigationContainer>
                     <RootStack.Navigator screenOptions={{ headerShown: false }}>
-                        <RootStack.Screen name="AppDrawer" component={DrawerNavigator} />
+                        <RootStack.Screen name="MainTabs" component={MainTabs} />
+                        <RootStack.Screen name="CreateBudget" component={CreateBudget} />
+                        <RootStack.Screen name="MerchantRules" component={MerchantRules} />
+                        <RootStack.Screen name="Transactions" component={Transactions} />
+                        <RootStack.Screen name="BillDetails" component={BillDetails} />
                         <RootStack.Screen
                             name="EditTransaction"
                             component={EditTransaction}

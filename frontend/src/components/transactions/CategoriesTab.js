@@ -1,21 +1,20 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
-import { ChevronLeft, ChevronRight, MoreHorizontal, ShoppingBag, Coffee, Home, CreditCard } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react-native';
 import DonutChart from '../DonutChart';
+import { getParentCategory, getCategoryColor, getCategoryIcon } from '../../constants/CategoryTaxonomy';
+import CategoryDrillDownModal from '../../components/CategoryDrillDownModal';
 
 const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [typeFilter, setTypeFilter] = useState('Expenses'); // Expenses | Income
-    const [expandedCategory, setExpandedCategory] = useState(null); // Track absolute category name
+    const [selectedParent, setSelectedParent] = useState(null); // Track selected parent for modal
     const initializedRef = useRef(false);
 
     // Auto-set date to the most recent transaction when data loads (ONLY ONCE)
     React.useEffect(() => {
         if (!initializedRef.current && transactions.length > 0) {
-            // Assuming transactions are sorted desc by date, or we iterate to find max
-            // Usually Plaid returns desc.
             const latestTx = transactions[0];
-            // Fix timezone issue: Split YYYY-MM-DD
             const [y, m, d] = latestTx.date.split('-').map(Number);
             const latestDate = new Date(y, m - 1, d);
             setSelectedDate(latestDate);
@@ -28,7 +27,6 @@ const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing })
         const newDate = new Date(selectedDate);
         newDate.setMonth(newDate.getMonth() + delta);
         setSelectedDate(newDate);
-        setExpandedCategory(null); // Reset expansion on date change
     };
 
     const formattedDate = selectedDate.toLocaleString('default', { month: 'short', year: 'numeric' });
@@ -51,16 +49,17 @@ const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing })
             return t.amount < 0;
         });
 
-        // 3. Group by Category
+        // 3. Group by PARENT Category
         const grouped = finalTransactions.reduce((acc, t) => {
-            const catName = t.personal_finance_category?.primary || t.category?.[0] || 'Uncategorized';
+            const rawCat = t.personal_finance_category?.primary || t.category?.[0] || 'Uncategorized';
+            const parentCat = getParentCategory(rawCat);
 
-            if (!acc[catName]) {
-                acc[catName] = { name: catName, amount: 0, count: 0, transactions: [] };
+            if (!acc[parentCat]) {
+                acc[parentCat] = { name: parentCat, amount: 0, count: 0, transactions: [] };
             }
-            acc[catName].amount += Math.abs(t.amount);
-            acc[catName].count += 1;
-            acc[catName].transactions.push(t);
+            acc[parentCat].amount += Math.abs(t.amount);
+            acc[parentCat].count += 1;
+            acc[parentCat].transactions.push(t);
             return acc;
         }, {});
 
@@ -69,19 +68,20 @@ const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing })
         const totalAmount = dataArray.reduce((sum, item) => sum + item.amount, 0);
 
         // 5. Assign Colors
-        const colors = ['#0EA5E9', '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7', '#D946EF', '#F43F5E'];
-        const dataWithColors = dataArray.map((item, idx) => ({
+        const dataWithColors = dataArray.map((item) => ({
             ...item,
             value: item.amount,
-            color: colors[idx % colors.length]
+            color: getCategoryColor(item.name)
         }));
 
         return { data: dataWithColors, total: totalAmount };
     }, [transactions, selectedDate, typeFilter]);
 
-    const toggleCategory = (catName) => {
-        setExpandedCategory(prev => prev === catName ? null : catName);
-    };
+    // Get transactions for the modal
+    const selectedParentTransactions = useMemo(() => {
+        if (!selectedParent) return [];
+        return chartData.data.find(d => d.name === selectedParent)?.transactions || [];
+    }, [selectedParent, chartData]);
 
     return (
         <ScrollView
@@ -134,60 +134,32 @@ const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing })
                 />
             </View>
 
-
-            {/* Category List */}
+            {/* Category List (Grouped by Parent) */}
             <View style={styles.categoryList}>
-                {chartData.data.map((item, idx) => {
-                    const isExpanded = expandedCategory === item.name;
-                    return (
-                        <View key={idx}>
-                            <TouchableOpacity
-                                style={styles.categoryItem}
-                                onPress={() => toggleCategory(item.name)}
-                                activeOpacity={0.7}
-                            >
-                                <View style={[styles.iconBox, { backgroundColor: item.color + '20' }]}>
-                                    <MoreHorizontal size={20} color={item.color} />
-                                </View>
-                                <View style={styles.categoryInfo}>
-                                    <Text style={styles.categoryName} numberOfLines={1}>{item.name}</Text>
-                                    <Text style={styles.categorySub}>
-                                        {((item.amount / (chartData.total || 1)) * 100).toFixed(1)}% • {item.count} transactions
-                                    </Text>
-                                </View>
-                                <View style={{ alignItems: 'flex-end' }}>
-                                    <Text style={[styles.categoryAmount, { color: typeFilter === 'Income' ? '#10B981' : '#F59E0B' }]}>
-                                        {typeFilter === 'Expenses' ? '-' : '+'}${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                    </Text>
-                                    {isExpanded ? <ChevronLeft size={16} color="#64748B" style={{ transform: [{ rotate: '-90deg' }], marginTop: 4 }} /> : null}
-                                </View>
-                            </TouchableOpacity>
-
-                            {/* Expanded Transactions List */}
-                            {isExpanded && (
-                                <View style={styles.transactionsList}>
-                                    {item.transactions.map((t, tIdx) => (
-                                        <TouchableOpacity
-                                            key={t.transaction_id || tIdx}
-                                            style={styles.transactionRow}
-                                            onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
-                                        >
-                                            <View style={styles.tInfo}>
-                                                <Text style={styles.tName} numberOfLines={1}>
-                                                    {t.personal_finance_category?.primary || t.category?.[0] || 'Uncategorized'}
-                                                </Text>
-                                                <Text style={styles.tDate}>{t.date}</Text>
-                                            </View>
-                                            <Text style={styles.tAmount}>
-                                                ${Math.abs(t.amount).toFixed(2)}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            )}
+                {chartData.data.map((item, idx) => (
+                    <TouchableOpacity
+                        key={idx}
+                        style={styles.categoryItem}
+                        onPress={() => setSelectedParent(item.name)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={[styles.iconBox, { backgroundColor: item.color + '20' }]}>
+                            {/* Assuming we might want dynamic icon later, for now Generic or mapped */}
+                            <MoreHorizontal size={20} color={item.color} />
                         </View>
-                    );
-                })}
+                        <View style={styles.categoryInfo}>
+                            <Text style={styles.categoryName} numberOfLines={1}>{item.name}</Text>
+                            <Text style={styles.categorySub}>
+                                {((item.amount / (chartData.total || 1)) * 100).toFixed(1)}% • {item.count} transactions
+                            </Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={[styles.categoryAmount, { color: typeFilter === 'Income' ? '#10B981' : '#F59E0B' }]}>
+                                {typeFilter === 'Expenses' ? '-' : '+'}${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </Text>
+                        </View>
+                    </TouchableOpacity>
+                ))}
 
                 {chartData.data.length === 0 && (
                     <Text style={styles.emptyText}>No transactions for this month.</Text>
@@ -195,6 +167,17 @@ const CategoriesTab = ({ transactions = [], navigation, onRefresh, refreshing })
             </View>
 
             <View style={{ height: 100 }} />
+
+            {/* Drill Down Modal */}
+            {selectedParent && (
+                <CategoryDrillDownModal
+                    visible={!!selectedParent}
+                    onClose={() => setSelectedParent(null)}
+                    parentCategory={selectedParent}
+                    transactions={selectedParentTransactions}
+                    navigation={navigation}
+                />
+            )}
         </ScrollView>
     );
 };
@@ -251,41 +234,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginVertical: 20,
     },
-    listHeader: {
-        paddingHorizontal: 20,
-        marginBottom: 10,
-    },
-    listHeaderRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    listHeaderText: {
-        color: '#E2E8F0',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    switchTrack: {
-        width: 36,
-        height: 20,
-        backgroundColor: '#334155',
-        borderRadius: 10,
-        justifyContent: 'center',
-        paddingHorizontal: 2,
-    },
-    switchActive: {
-        backgroundColor: '#FFF',
-    },
-    switchThumb: {
-        width: 16,
-        height: 16,
-        backgroundColor: '#FFF',
-        borderRadius: 8,
-    },
-    thumbActive: {
-        backgroundColor: '#0F172A',
-        alignSelf: 'flex-end',
-    },
     categoryList: {
         paddingHorizontal: 16,
     },
@@ -327,60 +275,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 30,
     },
-    fab: {
-        position: 'absolute',
-        bottom: 20,
-        right: 20,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#0EA5E9',
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4.65,
-        elevation: 8,
-    },
-    fabText: {
-        color: '#FFF',
-        fontSize: 32,
-        fontWeight: '300',
-        marginTop: -4
-    },
-    transactionsList: {
-        backgroundColor: '#162032',
-        paddingHorizontal: 16,
-        paddingBottom: 10,
-    },
-    transactionRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#1E293B',
-    },
-    tInfo: {
-        flex: 1,
-        marginRight: 10,
-    },
-    tName: {
-        color: '#E2E8F0',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    tDate: {
-        color: '#64748B',
-        fontSize: 12,
-        marginTop: 2,
-    },
-    tAmount: {
-        color: '#FFF',
-        fontSize: 14,
-        fontWeight: '600',
-    }
 });
 
 export default CategoriesTab;

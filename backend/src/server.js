@@ -46,7 +46,13 @@ const configuration = new Configuration({
 
 const client = new PlaidApi(configuration);
 
+// Import route modules
+const billsRoutes = require('./routes/bills');
+
 // --- Routes ---
+
+// API Routes
+app.use('/api/bills', billsRoutes);
 
 app.get('/', (req, res) => {
     res.json({ status: 'ok', message: 'FinTech Backend API is live', mode: process.env.PLAID_ENV });
@@ -67,17 +73,8 @@ app.get('/api/categories', async (req, res) => {
     }
 });
 
-app.post('/api/categories', async (req, res) => {
-    try {
-        const { name, color, icon } = req.body;
-        if (!name) return res.status(400).json({ error: 'Name is required' });
-        const newCategory = await db.addCategory(name, color, icon);
-        res.json(newCategory);
-    } catch (error) {
-        console.error('Error creating category:', error);
-        res.status(500).json({ error: 'Failed to create category' });
-    }
-});
+// Duplicate POST /api/categories removed from here.
+// Correct implementation is further down.
 
 // Duplicate route removed
 
@@ -230,7 +227,7 @@ app.get('/api/transactions', async (req, res) => {
                         access_token: item.access_token,
                         start_date: startDate,
                         end_date: endDate,
-                        options: { count: 100, offset: 0 }
+                        options: { count: 500, offset: 0 }
                     });
                     const transactions = response.data.transactions;
 
@@ -238,14 +235,34 @@ app.get('/api/transactions', async (req, res) => {
                     await db.upsertTransactions(transactions, item.item_id);
                     return transactions;
                 } catch (err) {
-                    console.error(`Error fetching transactions for ${item.institution_name}:`, err.response ? err.response.data : err.message);
-                    return [];
+                    const errorData = err.response ? err.response.data : {};
+                    console.error(`Error fetching transactions for ${item.institution_name}:`, errorData.error_message || err.message);
+
+                    // Return error structure for aggregation
+                    return {
+                        error: {
+                            institution: item.institution_name,
+                            code: errorData.error_code || 'SYNC_ERROR',
+                            message: errorData.error_message || err.message
+                        },
+                        transactions: []
+                    };
                 }
             });
 
             const results = await Promise.all(promises);
+
+            // Extract errors and successful transactions
+            const currentSyncErrors = results.filter(r => r && r.error).map(r => r.error);
+            const successBatches = results.map(r => Array.isArray(r) ? r : (r.transactions || []));
+
             // After sync, reload everything from DB to ensure metadata merging is consistent
+            // Note: DB upsert already happened in the loop for successful batches
             allTransactions = await db.getCachedTransactions(itemIds);
+
+            // Attach current sync errors to metadata map for this request scope or return directly
+            // We'll attach to the response object later
+            req.sync_errors = currentSyncErrors;
         }
 
         // 3. Merge with local overrides (metadata), Merchant Rules, and ADD Manual Transactions
@@ -310,13 +327,57 @@ app.get('/api/transactions', async (req, res) => {
                     : (merchantOverride.is_transfer === 1 ? true : (t.is_transfer || false)),
                 created_at: txOverride.created_at || t.updated_at || new Date().toISOString(),
                 updated_at: txOverride.updated_at || t.updated_at || new Date().toISOString(),
-                device_info: txOverride.device_info || 'Plaid Sync'
+                device_info: txOverride.device_info || 'Plaid Sync',
+                splits: txOverride.splits || null
             };
         });
 
+        // 4. Post-process: Explode Split Transactions
+        let combined = [...mappedManual, ...mergedTransactions];
+
+        // OPTIONAL: Filter by transaction_id if provided (e.g. for fetching details/siblings)
+        if (req.query.transaction_id) {
+            combined = combined.filter(t => t.transaction_id === req.query.transaction_id);
+        }
+
+        const finalTransactions = [];
+
+        for (const t of combined) {
+            let splits = t.splits;
+            if (typeof splits === 'string') {
+                try { splits = JSON.parse(splits); } catch (e) { splits = null; }
+            }
+
+            if (Array.isArray(splits) && splits.length > 0) {
+                // Determine sign based on parent amount (Income is negative, Expense is positive)
+                const sign = t.amount < 0 ? -1 : 1;
+                console.log(`Exploding transaction ${t.transaction_id} into ${splits.length} splits.`);
+
+                splits.forEach((split, idx) => {
+                    const splitAmount = Math.abs(parseFloat(split.amount || 0)) * sign;
+                    finalTransactions.push({
+                        ...t,
+                        transaction_id: `${t.transaction_id}_split_${idx}`,
+                        original_transaction_id: t.transaction_id,
+                        amount: splitAmount,
+                        // We keep the main intent (name, date, etc) but override category/amount
+                        category: [split.category],
+                        personal_finance_category: {
+                            primary: split.category
+                        },
+                        // Clear splits on children to prevent confusion
+                        splits: null
+                    });
+                });
+            } else {
+                finalTransactions.push(t);
+            }
+        }
+
         res.json({
-            transactions: [...mappedManual, ...mergedTransactions],
-            total_transactions: mappedManual.length + mergedTransactions.length
+            transactions: finalTransactions,
+            total_transactions: finalTransactions.length,
+            sync_errors: req.sync_errors || []
         });
 
     } catch (error) {
@@ -339,11 +400,6 @@ app.get('/api/accounts', async (req, res) => {
         const itemsToFetchFromPlaid = [];
 
         // 1. Check Cache first (unless sync=true)
-        const itemMap = items.reduce((map, item) => {
-            map[item.item_id] = item;
-            return map;
-        }, {});
-
         if (sync !== 'true') {
             for (const item of items) {
                 const cached = await db.getCachedAccountsByItem(item.item_id);
@@ -363,17 +419,51 @@ app.get('/api/accounts', async (req, res) => {
 
         // 2. Fetch from Plaid for missing/sync
         if (itemsToFetchFromPlaid.length > 0) {
-            console.log(`Backend: Fetching accounts from Plaid for ${itemsToFetchFromPlaid.length} items...`);
+            console.log(`Backend: Fetching accounts AND transactions from Plaid for ${itemsToFetchFromPlaid.length} items...`);
+
+            const now = new Date();
+            const endDate = now.toISOString().split('T')[0];
+            const startDate = '2023-01-01'; // Default range matching /transactions endpoint
+
             const promises = itemsToFetchFromPlaid.map(async (item) => {
                 try {
-                    const response = await client.accountsGet({ access_token: item.access_token });
-                    const accounts = response.data.accounts;
-                    await db.upsertAccounts(accounts, item.item_id);
+                    // Fetch Accounts and Transactions in parallel
+                    const [accountsResponse, transactionsResponse] = await Promise.allSettled([
+                        client.accountsGet({ access_token: item.access_token }),
+                        client.transactionsGet({
+                            access_token: item.access_token,
+                            start_date: startDate,
+                            end_date: endDate,
+                            options: { count: 100, offset: 0 }
+                        })
+                    ]);
+
+                    // Handle Accounts Response
+                    let accounts = [];
+                    if (accountsResponse.status === 'fulfilled') {
+                        accounts = accountsResponse.value.data.accounts;
+                        await db.upsertAccounts(accounts, item.item_id);
+                    } else {
+                        throw accountsResponse.reason; // Re-throw to handle in outer catch for error object creation
+                    }
+
+                    // Handle Transactions Response (Log error but don't fail the request)
+                    if (transactionsResponse.status === 'fulfilled') {
+                        const transactions = transactionsResponse.value.data.transactions;
+                        if (transactions && transactions.length > 0) {
+                            console.log(`Synced ${transactions.length} transactions for ${item.institution_name}`);
+                            await db.upsertTransactions(transactions, item.item_id);
+                        }
+                    } else {
+                        console.error(`Warning: Failed to sync transactions for ${item.institution_name}:`, transactionsResponse.reason.message);
+                    }
+
                     return accounts.map(a => ({
                         ...a,
                         item_id: item.item_id,
                         institution_name: item.institution_name
                     }));
+
                 } catch (err) {
                     const errorData = err.response ? err.response.data : {};
                     const errorCode = errorData.error_code || 'UNKNOWN_ERROR';
@@ -414,6 +504,17 @@ app.get('/api/accounts', async (req, res) => {
     }
 });
 
+// Fetch Accounts
+app.get('/api/accounts', async (req, res) => {
+    try {
+        const accounts = await db.getAllAccounts();
+        res.json({ accounts });
+    } catch (error) {
+        console.error('Error fetching accounts:', error);
+        res.status(500).json({ error: 'Failed to fetch accounts' });
+    }
+});
+
 // Fetch Merchants (Unique list)
 app.get('/api/merchants', async (req, res) => {
     logToFile('HIT /api/merchants handler'); // DEBUG
@@ -427,6 +528,45 @@ app.get('/api/merchants', async (req, res) => {
         console.error('Error fetching merchants:', error);
         logToFile(`Error fetching merchants: ${msg}`); // Capture invalid function calls etc
         res.status(500).json({ error: 'Failed to fetch merchants' });
+    }
+});
+
+// Fetch Categories
+app.get('/api/categories', async (req, res) => {
+    try {
+        const categories = await db.getAllCategories();
+        res.json({ categories });
+    } catch (error) {
+        console.error('Error fetching categories:', error);
+        res.status(500).json({ error: 'Failed to fetch categories' });
+    }
+});
+
+// Create Category
+app.post('/api/categories', async (req, res) => {
+    const { name, parent_category, color, icon } = req.body;
+    console.log(`SERVER: Received POST /categories. Name: '${name}', Parent: '${parent_category}', Color: '${color}'`);
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+
+    try {
+        await db.addCategory(name, parent_category, color, icon);
+        console.log(`SERVER: Successfully added category '${name}' with parent '${parent_category}'`);
+        res.json({ status: 'success' });
+    } catch (error) {
+        console.error('Error creating category:', error);
+        res.status(500).json({ error: 'Failed to create category' });
+    }
+});
+
+// Delete Category
+app.delete('/api/categories/:name', async (req, res) => {
+    const { name } = req.params;
+    try {
+        await db.deleteCategory(name);
+        res.json({ status: 'success' });
+    } catch (error) {
+        console.error('Failed to delete category:', error);
+        res.status(500).json({ error: 'Failed to delete category' });
     }
 });
 
@@ -458,9 +598,15 @@ app.post('/api/merchants/apply-rule', async (req, res) => {
 // Create or Update Manual Transaction
 app.post('/api/transactions', async (req, res) => {
     const data = req.body;
+    console.log('POST /transactions BODY:', JSON.stringify(data, null, 2));
+    logToFile(`POST /transactions BODY: ${JSON.stringify(data)}`);
     try {
         const id = data.transaction_id || `manual_${Date.now()}`;
-        if (data.transaction_id) {
+
+        // Check if exists
+        const existing = await db.getManualTransaction(id);
+
+        if (existing) {
             await db.updateManualTransaction(id, data);
         } else {
             await db.addManualTransaction(id, data);
@@ -475,12 +621,27 @@ app.post('/api/transactions', async (req, res) => {
 // Delete Transaction (Manual Only)
 app.delete('/api/transactions/:id', async (req, res) => {
     const { id } = req.params;
+    console.log(`Attempting to delete transaction with ID: ${id}`);
     try {
         await db.deleteManualTransaction(id);
+        console.log(`Successfully deleted transaction: ${id}`);
         res.json({ status: 'success' });
     } catch (error) {
         console.error('Failed to delete transaction:', error);
         res.status(500).json({ error: 'Failed to delete transaction' });
+    }
+});
+
+// Fix Corrupted Categories
+app.post('/api/fix-categories', async (req, res) => {
+    try {
+        await db.run("UPDATE categories SET parent_category = 'Income' WHERE parent_category LIKE '#%'");
+        // Also fix specific known bad ones if any
+        await db.run("UPDATE categories SET parent_category = 'Income' WHERE parent_category = 'undefined'");
+        res.json({ status: 'success', message: 'Fixed corrupted categories' });
+    } catch (error) {
+        console.error('Failed to fix categories:', error);
+        res.status(500).json({ error: 'Failed to fix categories' });
     }
 });
 

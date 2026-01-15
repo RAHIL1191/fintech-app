@@ -30,6 +30,16 @@ const Dashboard = () => {
             const totalBalance = accounts.reduce((sum, acc) => sum + (acc.balances.current || 0), 0);
 
             const plaidTransactions = response.data.transactions || [];
+
+            // Calculate Income and Expenses (Excluding Transfers)
+            const income = plaidTransactions
+                .filter(t => t.amount < 0 && !t.is_transfer)
+                .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+            const expenses = plaidTransactions
+                .filter(t => t.amount > 0 && !t.is_transfer)
+                .reduce((sum, t) => sum + t.amount, 0);
+
             const formattedTxs = plaidTransactions.map(tx => ({
                 ...tx, // Preserve raw data for TransactionDetails
                 id: tx.transaction_id,
@@ -42,8 +52,8 @@ const Dashboard = () => {
 
             setBalance({
                 total: totalBalance.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
-                income: 'Calculating...',
-                expenses: 'Calculating...'
+                income: income.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
+                expenses: expenses.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
             });
             setTransactions(formattedTxs);
         } catch (error) {
@@ -98,14 +108,14 @@ const Dashboard = () => {
                                 <ArrowDownLeft size={20} color="#0288D1" />
                             </View>
                             <Text style={styles.statLabel}>Income</Text>
-                            <Text style={styles.statValue}>+$5,200</Text>
+                            <Text style={styles.statValue}>{balance.income !== 'Calculating...' ? `+${balance.income}` : '...'}</Text>
                         </View>
                         <View style={styles.statItem}>
                             <View style={[styles.iconBg, { backgroundColor: '#FBE9E7' }]}>
                                 <ArrowUpRight size={20} color="#D84315" />
                             </View>
                             <Text style={styles.statLabel}>Expenses</Text>
-                            <Text style={styles.statValue}>-$1,840</Text>
+                            <Text style={styles.statValue}>{balance.expenses !== 'Calculating...' ? `-${balance.expenses}` : '...'}</Text>
                         </View>
                     </View>
                 </View>

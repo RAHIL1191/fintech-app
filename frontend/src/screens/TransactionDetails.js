@@ -11,6 +11,26 @@ const TransactionDetails = () => {
     const route = useRoute();
     const insets = useSafeAreaInsets();
     const { transaction } = route.params || {};
+    const [relatedSplits, setRelatedSplits] = React.useState([]);
+
+    React.useEffect(() => {
+        if (!transaction) return;
+
+        // Ensure we find the Original Parent ID
+        const parentId = transaction.original_transaction_id || transaction.transaction_id;
+
+        // If this IS a split (has original_transaction_id), fetch siblings
+        if (transaction.original_transaction_id || transaction.transaction_id.includes('_split_')) {
+            api.get('/transactions', { params: { transaction_id: parentId } })
+                .then(res => {
+                    const allSplits = res.data.transactions || [];
+                    // Filter out SELF
+                    const siblings = allSplits.filter(t => t.transaction_id !== transaction.transaction_id);
+                    setRelatedSplits(siblings);
+                })
+                .catch(err => console.log('Failed to fetch related splits:', err));
+        }
+    }, [transaction]);
 
     if (!transaction) return null;
 
@@ -33,7 +53,11 @@ const TransactionDetails = () => {
                                 Alert.alert("Note", "Only manually added transactions can be deleted in this version.");
                                 return;
                             }
-                            navigation.goBack();
+                            if (navigation.canGoBack()) {
+                                navigation.goBack();
+                            } else {
+                                navigation.navigate('Transactions');
+                            }
                         } catch (error) {
                             console.error('Failed to delete:', error);
                         }
@@ -121,28 +145,27 @@ const TransactionDetails = () => {
                         </View>
                     </View>
 
-                    {transaction.splits && (
+                    {/* Related Splits Section */}
+                    {relatedSplits.length > 0 && (
                         <View style={[styles.detailCard, { flexDirection: 'column', alignItems: 'flex-start' }]}>
-                            <Text style={[styles.detailLabel, { marginBottom: 12 }]}>Category Splits</Text>
-                            {(() => {
-                                try {
-                                    const parsedSplits = typeof transaction.splits === 'string' ? JSON.parse(transaction.splits) : transaction.splits;
-                                    if (!Array.isArray(parsedSplits)) return null;
-                                    return parsedSplits.map((split, idx) => (
-                                        <View key={idx} style={styles.splitDetailRow}>
-                                            <View style={styles.splitDetailCategory}>
-                                                <Tag size={16} color="#64748B" style={{ marginRight: 8 }} />
-                                                <Text style={styles.splitDetailText}>{split.category || 'General'}</Text>
-                                            </View>
-                                            <Text style={styles.splitDetailAmount}>
-                                                {formatCurrency(parseFloat(split.amount || 0))}
-                                            </Text>
-                                        </View>
-                                    ));
-                                } catch (e) {
-                                    return <Text style={styles.detailSubtext}>Error loading splits</Text>;
-                                }
-                            })()}
+                            <Text style={[styles.detailLabel, { marginBottom: 12 }]}>Related Splits</Text>
+                            {relatedSplits.map((split, idx) => (
+                                <TouchableOpacity
+                                    key={split.transaction_id || idx}
+                                    style={styles.splitDetailRow}
+                                    onPress={() => navigation.push('TransactionDetails', { transaction: split })}
+                                >
+                                    <View style={styles.splitDetailCategory}>
+                                        <Tag size={16} color="#6366F1" style={{ marginRight: 8 }} />
+                                        <Text style={styles.splitDetailText}>
+                                            {split.personal_finance_category?.primary || split.category?.[0] || 'Split'}
+                                        </Text>
+                                    </View>
+                                    <Text style={styles.splitDetailAmount}>
+                                        {formatCurrency(Math.abs(split.amount))}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
                     )}
 

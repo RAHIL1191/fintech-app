@@ -10,6 +10,15 @@ const CustomDatePicker = ({ selectedDate, onDateSelect, onClose }) => {
 
     const [currentMonth, setCurrentMonth] = useState(validInitialDate);
 
+    useEffect(() => {
+        if (selectedDate) {
+            const d = new Date(selectedDate);
+            if (!isNaN(d.getTime())) {
+                setCurrentMonth(d);
+            }
+        }
+    }, [selectedDate]);
+
     const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const MONTHS = [
         'January', 'February', 'March', 'April', 'May', 'June',

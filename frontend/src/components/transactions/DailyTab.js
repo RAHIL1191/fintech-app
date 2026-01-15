@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, SectionList } from 'react-native';
 import { ShoppingBag, Coffee, Home, CreditCard, DollarSign, RefreshCw, ArrowRightLeft, Plus } from 'lucide-react-native';
 
 const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
@@ -110,66 +110,70 @@ const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
             </View>
 
             {/* Transactions List */}
-            <ScrollView
-                contentContainerStyle={styles.listContent}
-                refreshControl={
-                    onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" /> : null
-                }
-            >
-                {groupedData.map((group) => (
-                    <View key={group.date} style={styles.dateGroup}>
-                        {/* Header */}
+            {groupedData.length > 0 ? (
+                <SectionList
+                    sections={groupedData.map(g => ({
+                        title: g.date,
+                        total: g.total,
+                        data: g.transactions
+                    }))}
+                    keyExtractor={(item, index) => item.transaction_id || index.toString()}
+                    contentContainerStyle={styles.listContent}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />
+                    }
+                    renderSectionHeader={({ section: { title, total } }) => (
                         <View style={styles.dateHeader}>
-                            <Text style={styles.dateTitle}>{formatDateHeader(group.date)}</Text>
+                            <Text style={styles.dateTitle}>{formatDateHeader(title)}</Text>
                             <Text style={[
                                 styles.dateTotal,
-                                { color: group.total > 0 ? '#FFF' : '#10B981' }
+                                { color: total > 0 ? '#FFF' : '#10B981' }
                             ]}>
-                                {group.total > 0 ? '-' : '+'}${Math.abs(group.total).toFixed(2)}
+                                {total > 0 ? '-' : '+'}${Math.abs(total).toFixed(2)}
                             </Text>
                         </View>
-
-                        {/* Cards */}
-                        {group.transactions.map((t, idx) => (
-                            <TouchableOpacity
-                                key={t.transaction_id || idx}
-                                style={styles.card}
-                                activeOpacity={0.8}
-                                onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
-                            >
-                                <View style={styles.cardLeft}>
-                                    <View style={[styles.cardIcon, { backgroundColor: getIconColor(t.personal_finance_category?.primary) }]}>
-                                        {getIconForCategory(t.personal_finance_category?.primary)}
-                                    </View>
-                                    <View style={styles.cardInfo}>
-                                        <Text style={styles.cardTitle} numberOfLines={1}>{t.name}</Text>
-                                        <Text style={styles.cardSubtitle} numberOfLines={1}>
-                                            {t.personal_finance_category?.primary || 'General'}
-                                            {t.time ? ` • ${formatTime(t.time)}` : ''}
-                                        </Text>
-                                    </View>
+                    )}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity
+                            style={styles.card}
+                            activeOpacity={0.8}
+                            onPress={() => navigation.navigate('TransactionDetails', { transaction: item })}
+                        >
+                            <View style={styles.cardLeft}>
+                                <View style={[styles.cardIcon, { backgroundColor: getIconColor(item.personal_finance_category?.primary) }]}>
+                                    {getIconForCategory(item.personal_finance_category?.primary)}
                                 </View>
-                                <Text style={[
-                                    styles.cardAmount,
-                                    { color: t.amount > 0 ? '#FFF' : '#10B981' }
-                                ]}>
-                                    {t.amount > 0 ? '-' : '+'}${Math.abs(t.amount).toFixed(2)}
-                                </Text>
-                                <View style={[
-                                    styles.cardAccentBar,
-                                    { backgroundColor: t.amount > 0 ? '#F59E0B' : '#10B981' }
-                                ]} />
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                ))}
-
-                {groupedData.length === 0 && (
+                                <View style={styles.cardInfo}>
+                                    <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
+                                    <Text style={styles.cardSubtitle} numberOfLines={1}>
+                                        {item.personal_finance_category?.primary || 'General'}
+                                        {item.time ? ` • ${formatTime(item.time)}` : ''}
+                                    </Text>
+                                </View>
+                            </View>
+                            <Text style={[
+                                styles.cardAmount,
+                                { color: item.amount > 0 ? '#FFF' : '#10B981' }
+                            ]}>
+                                {item.amount > 0 ? '-' : '+'}${Math.abs(item.amount).toFixed(2)}
+                            </Text>
+                            <View style={[
+                                styles.cardAccentBar,
+                                { backgroundColor: item.amount > 0 ? '#F59E0B' : '#10B981' }
+                            ]} />
+                        </TouchableOpacity>
+                    )}
+                    ListFooterComponent={<View style={{ height: 100 }} />}
+                    stickySectionHeadersEnabled={false}
+                />
+            ) : (
+                <ScrollView
+                    contentContainerStyle={{ flex: 1, alignItems: 'center', paddingTop: 40 }}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
+                >
                     <Text style={styles.emptyText}>No transactions found.</Text>
-                )}
-
-                <View style={{ height: 100 }} />
-            </ScrollView>
+                </ScrollView>
+            )}
 
             {/* Expandable FAB Overlay */}
             {isFabExpanded && (

@@ -1,22 +1,19 @@
-const db = require('./src/database');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
+const fs = require('fs');
 
-const run = async () => {
-    try {
-        await db.init();
-        const items = await db.getAllPlaidItems();
-        console.log('--- Stored Plaid Items ---');
-        items.forEach(item => {
-            console.log(`ID: ${item.item_id}`);
-            console.log(`Institution: ${item.institution_name}`);
-            console.log(`Token: ${item.access_token.substring(0, 15)}...`);
-            console.log('--------------------------');
-        });
-        if (items.length === 0) {
-            console.log('No items found in database.');
-        }
-    } catch (error) {
-        console.error('Error reading DB:', error);
+const dbPath = path.resolve(__dirname, 'data.db');
+const db = new sqlite3.Database(dbPath);
+const logFile = path.resolve(__dirname, 'migration_result.txt');
+
+db.all("PRAGMA table_info(bill_exceptions)", (err, rows) => {
+    let msg = "";
+    if (err) {
+        msg = "Error: " + err.message;
+    } else {
+        msg = "Columns: " + JSON.stringify(rows.map(r => r.name));
     }
-};
-
-run();
+    fs.writeFileSync(logFile, msg);
+    console.log(msg);
+    db.close();
+});
