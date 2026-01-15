@@ -748,6 +748,7 @@ class DatabaseManager {
         VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
                     ON CONFLICT(transaction_id) DO UPDATE SET
         amount = EXCLUDED.amount,
+            date = EXCLUDED.date,
             pending = EXCLUDED.pending,
             category = EXCLUDED.category,
             personal_finance_category = EXCLUDED.personal_finance_category,
@@ -762,6 +763,7 @@ class DatabaseManager {
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(transaction_id) DO UPDATE SET
         amount = excluded.amount,
+            date = excluded.date,
             pending = excluded.pending,
             category = excluded.category,
             personal_finance_category = excluded.personal_finance_category,
