@@ -335,6 +335,40 @@ app.get('/api/transactions', async (req, res) => {
         // 4. Post-process: Explode Split Transactions
         let combined = [...mappedManual, ...mergedTransactions];
 
+        // 4.1 Deduplicate: Remove pending transactions if their posted versions exist
+        // Plaid creates different transaction_ids for pending vs posted transactions
+        const deduped = [];
+        const seenKey = new Set();
+
+        // Sort so posted transactions come before pending ones (pending=true sorts after pending=false)
+        combined.sort((a, b) => {
+            if (a.pending === b.pending) return new Date(b.date) - new Date(a.date);
+            return a.pending ? 1 : -1; // Posted first
+        });
+
+        for (const t of combined) {
+            // Create a key: account_id + rounded amount + approximate date bucket (5-day window)
+            const dateObj = new Date(t.date);
+            const dateBucket = Math.floor(dateObj.getTime() / (5 * 24 * 60 * 60 * 1000)); // 5-day buckets
+            const amountKey = Math.round(Math.abs(t.amount) * 100); // Round to cents
+            const key = `${t.account_id}_${amountKey}_${dateBucket}`;
+
+            // Also check adjacent date buckets to catch edge cases
+            const prevBucket = `${t.account_id}_${amountKey}_${dateBucket - 1}`;
+            const nextBucket = `${t.account_id}_${amountKey}_${dateBucket + 1}`;
+
+            // Skip if we've seen a similar transaction (posted version already added)
+            if (t.pending && (seenKey.has(key) || seenKey.has(prevBucket) || seenKey.has(nextBucket))) {
+                console.log(`Dedup: Skipping pending transaction ${t.name} (${t.amount}) - posted version exists`);
+                continue;
+            }
+
+            seenKey.add(key);
+            deduped.push(t);
+        }
+
+        combined = deduped;
+
         // OPTIONAL: Filter by transaction_id if provided (e.g. for fetching details/siblings)
         if (req.query.transaction_id) {
             combined = combined.filter(t => t.transaction_id === req.query.transaction_id);
