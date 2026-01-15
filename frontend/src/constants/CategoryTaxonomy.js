@@ -2,12 +2,12 @@ export const CATEGORY_TAXONOMY = {
     "Food & Drink": {
         icon: "coffee",
         color: "#F59E0B", // Amber
-        subcategories: ["Groceries", "Restaurants", "Coffee", "Alcohol", "Fast Food", "Snacks"]
+        subcategories: ["Groceries", "Restaurants", "Coffee", "Alcohol", "Fast Food", "Snacks", "Grocery"]
     },
     "Shopping": {
         icon: "shopping-bag",
         color: "#EC4899", // Pink
-        subcategories: ["Clothing", "Electronics", "Home & Garden", "Beauty", "Kids", "Pets", "Gifts"]
+        subcategories: ["Clothing", "Electronics", "Home & Garden", "Beauty", "Kids", "Pets", "Gifts", "Laptop Purchase"]
     },
     "Housing": {
         icon: "home",
@@ -17,27 +17,27 @@ export const CATEGORY_TAXONOMY = {
     "Transportation": {
         icon: "car",
         color: "#EF4444", // Red
-        subcategories: ["Fuel", "Public Transit", "Taxi/Uber", "Car Payment", "Insurance", "Repairs", "Parking"]
+        subcategories: ["Fuel", "Public Transit", "Taxi/Uber", "Car Payment", "Insurance", "Repairs", "Parking", "Petrol", "License fees", "Parking fees"]
     },
     "Entertainment": {
         icon: "film",
         color: "#8B5CF6", // Violet
-        subcategories: ["Movies", "Games", "Music", "Sports", "Events", "Hobbies", "Travel"]
+        subcategories: ["Movies", "Games", "Music", "Sports", "Events", "Hobbies", "Travel", "Recreational Stuff"]
     },
     "Financial": {
         icon: "dollar-sign",
         color: "#10B981", // Emerald
-        subcategories: ["Investments", "Taxes", "Insurance", "Fees", "Loan Payment", "Transfer"]
+        subcategories: ["Investments", "Taxes", "Insurance", "Fees", "Loan Payment", "Transfer", "Wise Withdrawal"]
     },
     "Health": {
         icon: "activity",
         color: "#14B8A6", // Teal
-        subcategories: ["Doctor", "Pharmacy", "Gym", "Therapy", "Dental", "Vision"]
+        subcategories: ["Doctor", "Pharmacy", "Gym", "Therapy", "Dental", "Vision", "Massage"]
     },
     "Bills & Utilities": {
         icon: "FileText",
         color: "#6366F1", // Indigo
-        subcategories: ["Phone", "Internet", "Water", "Electricity", "Gas", "Subscriptions"]
+        subcategories: ["Phone", "Internet", "Water", "Electricity", "Gas", "Subscriptions", "Mobile Bill", "Internet home", "Subscription"]
     },
     "Education": {
         icon: "book-open",

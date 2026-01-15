@@ -576,6 +576,31 @@ class DatabaseManager {
         return this.get('SELECT * FROM categories WHERE name = ?', [name]);
     }
 
+    async updateCategory(name, data) {
+        const { parent_category, icon, color } = data;
+        let sql;
+        if (this.isPostgres) {
+            sql = `UPDATE categories SET 
+                parent_category = COALESCE($1, parent_category),
+                icon = COALESCE($2, icon),
+                color = COALESCE($3, color)
+                WHERE name = $4`;
+        } else {
+            sql = `UPDATE categories SET 
+                parent_category = COALESCE(?, parent_category),
+                icon = COALESCE(?, icon),
+                color = COALESCE(?, color)
+                WHERE name = ?`;
+        }
+        await this.run(sql, [parent_category, icon, color, name]);
+        return this.get('SELECT * FROM categories WHERE name = ?', [name]);
+    }
+
+    async deleteCategory(name) {
+        await this.run('DELETE FROM categories WHERE name = ?', [name]);
+        return { deleted: true };
+    }
+
     async upsertPlaidItem(itemId, accessToken, institutionName) {
         let sql;
         if (this.isPostgres) {

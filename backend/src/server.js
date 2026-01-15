@@ -76,6 +76,30 @@ app.get('/api/categories', async (req, res) => {
 // Duplicate POST /api/categories removed from here.
 // Correct implementation is further down.
 
+// Update a category (set parent_category, icon, color)
+app.put('/api/categories/:name', async (req, res) => {
+    try {
+        const { name } = req.params;
+        const updated = await db.updateCategory(decodeURIComponent(name), req.body);
+        res.json(updated);
+    } catch (error) {
+        console.error('Error updating category:', error);
+        res.status(500).json({ error: 'Failed to update category' });
+    }
+});
+
+// Delete a category
+app.delete('/api/categories/:name', async (req, res) => {
+    try {
+        const { name } = req.params;
+        await db.deleteCategory(decodeURIComponent(name));
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting category:', error);
+        res.status(500).json({ error: 'Failed to delete category' });
+    }
+});
+
 // Duplicate route removed
 
 
