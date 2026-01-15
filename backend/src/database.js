@@ -517,6 +517,40 @@ class DatabaseManager {
     async getCategories() {
         if (!this.pool && !this.db) await this.init();
 
+        // Mapping of Plaid category names to parent categories
+        const dynamicParentMap = {
+            'BANK_FEES': 'Financial',
+            'Bank Fees': 'Financial',
+            'GENERAL_MERCHANDISE': 'Shopping',
+            'General Merchandise': 'Shopping',
+            'GENERAL_SERVICES': 'Other',
+            'General Services': 'Other',
+            'GOVERNMENT_AND_NON_PROFIT': 'Other',
+            'Government And Non Profit': 'Other',
+            'HOME_IMPROVEMENT': 'Housing',
+            'Home Improvement': 'Housing',
+            'LOAN_PAYMENTS': 'Financial',
+            'Loan Payments': 'Financial',
+            'MEDICAL': 'Health',
+            'Medical': 'Health',
+            'RENT_AND_UTILITIES': 'Bills & Utilities',
+            'Rent And Utilities': 'Bills & Utilities',
+            'TRANSFER_IN': 'Financial',
+            'Transfer In': 'Financial',
+            'TRANSFER_OUT': 'Financial',
+            'Transfer Out': 'Financial',
+            'TRANSPORTATION': 'Transportation',
+            'Transportation': 'Transportation',
+            'FOOD_AND_DRINK': 'Food & Drink',
+            'Food And Drink': 'Food & Drink',
+            'ENTERTAINMENT': 'Entertainment',
+            'Entertainment': 'Entertainment',
+            'INCOME': 'Income',
+            'Income': 'Income',
+            'PERSONAL_CARE': 'Health',
+            'Personal Care': 'Health'
+        };
+
         // Helper to normalize names for comparison
         const normalize = (n) => n.toLowerCase().replace(/[^a-z0-9]/g, '').replace('and', '');
 
@@ -550,12 +584,16 @@ class DatabaseManager {
 
                 const normName = normalize(displayName);
                 if (!normalizedSeen.has(normName)) {
+                    // Determine parent category
+                    const parent = dynamicParentMap[row.name] || dynamicParentMap[displayName] || null;
+
                     merged.push({
                         id: 'dynamic_' + row.name,
                         name: displayName,
                         original_name: row.name,
                         icon: 'tag',
-                        color: '#64748B'
+                        color: '#64748B',
+                        parent_category: parent
                     });
                     normalizedSeen.set(normName, displayName);
                 }
