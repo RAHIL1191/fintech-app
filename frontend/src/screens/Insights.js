@@ -1004,7 +1004,7 @@ const Insights = () => {
                     <View style={styles.cardInfo}>
                         <Text style={styles.cardTitle}>{getTransactionDisplayName(t)}</Text>
                         <Text style={styles.cardSubtitle}>
-                            {new Date(t.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, {formatTime(t.time || '12:00')} • {formatCategory(t.personal_finance_category?.primary || t.category?.[0])}
+                            {new Date(t.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{t.updated_at ? `, ${new Date(t.updated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''} • {formatCategory(t.personal_finance_category?.primary || t.category?.[0])}
                         </Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
                             {getAccountIcon(t.account_type)}
