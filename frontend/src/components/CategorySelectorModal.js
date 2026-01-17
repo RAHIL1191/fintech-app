@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Alert } from 'react-native';
-import { X, Search, ChevronLeft, ChevronRight, Plus, Check, Trash2 } from 'lucide-react-native';
+import { X, Search, ChevronLeft, ChevronRight, Plus, Check } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CATEGORY_TAXONOMY, getCategoryIcon, getCategoryColor } from '../constants/CategoryTaxonomy';
 import * as LucideIcons from 'lucide-react-native';
@@ -79,35 +79,7 @@ const CategorySelectorModal = ({ visible, onClose, onSelect, currentCategory }) 
         }
     };
 
-    const handleDeleteCategory = (categoryName) => {
-        // Check if it's a system category
-        const isSystem = !customCategories.some(c => c.name === categoryName);
-        if (isSystem) {
-            Alert.alert("Cannot Delete", `"${categoryName}" is a built-in category and cannot be deleted.`);
-            return;
-        }
 
-        Alert.alert(
-            "Delete Category",
-            `Are you sure you want to delete "${categoryName}"?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            await api.delete(`/categories/${categoryName}`);
-                            await fetchCustomCategories();
-                        } catch (err) {
-                            console.error('Delete failed:', err);
-                            Alert.alert("Error", "Failed to delete category");
-                        }
-                    }
-                }
-            ]
-        );
-    };
 
 
 
@@ -202,25 +174,16 @@ const CategorySelectorModal = ({ visible, onClose, onSelect, currentCategory }) 
                     const data = mergedTaxonomy[parent];
                     const isCustomParent = customCategories.some(c => c.name === parent && !c.parent_category);
                     return (
-                        <View key={parent} style={styles.gridItemWrapper}>
-                            <TouchableOpacity
-                                style={styles.gridItem}
-                                onPress={() => setSelectedParent(parent)}
-                            >
-                                <View style={[styles.iconCircle, { backgroundColor: data.color + '20' }]}>
-                                    <DynamicIcon name={data.icon} color={data.color} size={28} />
-                                </View>
-                                <Text style={styles.gridLabel} numberOfLines={2}>{parent}</Text>
-                            </TouchableOpacity>
-                            {isCustomParent && (
-                                <TouchableOpacity
-                                    style={styles.gridDeleteButton}
-                                    onPress={() => handleDeleteCategory(parent)}
-                                >
-                                    <Trash2 size={18} color="#EF4444" />
-                                </TouchableOpacity>
-                            )}
-                        </View>
+                        <TouchableOpacity
+                            key={parent}
+                            style={styles.gridItem}
+                            onPress={() => setSelectedParent(parent)}
+                        >
+                            <View style={[styles.iconCircle, { backgroundColor: data.color + '20' }]}>
+                                <DynamicIcon name={data.icon} color={data.color} size={28} />
+                            </View>
+                            <Text style={styles.gridLabel} numberOfLines={2}>{parent}</Text>
+                        </TouchableOpacity>
                     );
                 })}
             </ScrollView>
@@ -244,27 +207,20 @@ const CategorySelectorModal = ({ visible, onClose, onSelect, currentCategory }) 
                     {subs.map((sub) => {
                         const isCustom = customCategories.some(c => c.name === sub);
                         return (
-                            <View key={sub} style={styles.listItemRow}>
-                                <TouchableOpacity
-                                    style={styles.listItemContent}
-                                    onPress={() => {
-                                        onSelect(sub);
-                                        onClose();
-                                    }}
-                                >
-                                    <View style={[styles.iconCircleSmall, { backgroundColor: '#F1F5F9' }]}>
-                                        <View style={[styles.dot, { backgroundColor: data.color }]} />
-                                    </View>
-                                    <Text style={styles.listLabel}>{sub}</Text>
-                                    {currentCategory === sub && <Check size={16} color={data.color} />}
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.deleteButton}
-                                    onPress={() => handleDeleteCategory(sub)}
-                                >
-                                    <Trash2 size={18} color={isCustom ? "#EF4444" : "#94A3B8"} />
-                                </TouchableOpacity>
-                            </View>
+                            <TouchableOpacity
+                                key={sub}
+                                style={styles.listItem}
+                                onPress={() => {
+                                    onSelect(sub);
+                                    onClose();
+                                }}
+                            >
+                                <View style={[styles.iconCircleSmall, { backgroundColor: '#F1F5F9' }]}>
+                                    <View style={[styles.dot, { backgroundColor: data.color }]} />
+                                </View>
+                                <Text style={styles.listLabel}>{sub}</Text>
+                                {currentCategory === sub && <Check size={16} color={data.color} />}
+                            </TouchableOpacity>
                         );
                     })}
                 </ScrollView>
