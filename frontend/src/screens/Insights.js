@@ -889,10 +889,10 @@ const Insights = () => {
         return t.name;
     };
 
-    const getIconForCategory = (category) => {
+    const getIconForCategory = (category, color = '#FFF') => {
         const iconName = getCategoryIcon(category, mergedTaxonomy);
         const IconComponent = getIconComponent(iconName);
-        return <IconComponent size={20} color="#FFF" />;
+        return <IconComponent size={20} color={color} />;
     };
 
     const getIconComponent = (name) => {
@@ -1287,7 +1287,7 @@ const Insights = () => {
                                                 {subWithColors.map((item, idx) => (
                                                     <TouchableOpacity key={idx} style={styles.spendingItem} onPress={() => setSelectedSubcategory(item)}>
                                                         <View style={[styles.spendingIcon, { backgroundColor: item.color + '20' }]}>
-                                                            {getIconForCategory(item.name)}
+                                                            {getIconForCategory(item.name, item.color)}
                                                         </View>
                                                         <View style={{ flex: 1, marginHorizontal: 12 }}>
                                                             <Text style={styles.spendingName}>{item.name}</Text>
