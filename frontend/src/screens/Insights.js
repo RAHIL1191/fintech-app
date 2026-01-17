@@ -1263,16 +1263,30 @@ const Insights = () => {
                                         const subArray = Object.values(subGroups).sort((a, b) => b.amount - a.amount);
                                         const subTotal = drillDownGroup.amount;
 
-                                        const subDonutData = subArray.map(s => ({ value: s.amount, color: drillDownGroup.color }));
+                                        // Generate distinct colors for each subcategory
+                                        const baseColor = drillDownGroup.color || '#3B82F6';
+                                        const colorPalette = [
+                                            baseColor,
+                                            '#F59E0B', '#EC4899', '#10B981', '#8B5CF6',
+                                            '#EF4444', '#06B6D4', '#F97316', '#14B8A6',
+                                            '#6366F1', '#22C55E', '#64748B'
+                                        ];
+
+                                        const subWithColors = subArray.map((s, idx) => ({
+                                            ...s,
+                                            color: colorPalette[idx % colorPalette.length]
+                                        }));
+
+                                        const subDonutData = subWithColors.map(s => ({ value: s.amount, color: s.color }));
 
                                         return (
                                             <View>
                                                 <View style={{ alignItems: 'center', marginVertical: 10 }}>
                                                     <DonutChart data={subDonutData} size={150} strokeWidth={20} centerLabel="Total" centerValue={`$${Math.floor(subTotal)}`} />
                                                 </View>
-                                                {subArray.map((item, idx) => (
+                                                {subWithColors.map((item, idx) => (
                                                     <TouchableOpacity key={idx} style={styles.spendingItem} onPress={() => setSelectedSubcategory(item)}>
-                                                        <View style={[styles.spendingIcon, { backgroundColor: drillDownGroup.color + '20' }]}>
+                                                        <View style={[styles.spendingIcon, { backgroundColor: item.color + '20' }]}>
                                                             {getIconForCategory(item.name)}
                                                         </View>
                                                         <View style={{ flex: 1, marginHorizontal: 12 }}>
