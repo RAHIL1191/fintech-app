@@ -59,8 +59,28 @@ export const CATEGORY_TAXONOMY = {
 // Helper to find parent for a given subcategory
 export const getParentCategory = (subCategory, taxonomy = CATEGORY_TAXONOMY) => {
     if (!subCategory) return "Other";
+
+    // Normalize for comparison
+    const normalizedSub = subCategory.toLowerCase().replace(/_/g, ' ');
+
     for (const [parent, data] of Object.entries(taxonomy)) {
+        // Exact match on subcategory or parent name
         if (data.subcategories.includes(subCategory) || parent === subCategory) {
+            return parent;
+        }
+
+        // Check if category starts with any known subcategory (for Plaid detailed categories)
+        // e.g., "General Merchandise Clothing And Accessories" starts with "General Merchandise"
+        for (const sub of data.subcategories) {
+            const normalizedKnown = sub.toLowerCase().replace(/_/g, ' ');
+            if (normalizedSub.startsWith(normalizedKnown) || normalizedSub.startsWith(sub.toLowerCase())) {
+                return parent;
+            }
+        }
+
+        // Also check if it starts with parent name
+        const normalizedParent = parent.toLowerCase().replace(/_/g, ' ');
+        if (normalizedSub.startsWith(normalizedParent)) {
             return parent;
         }
     }
