@@ -428,13 +428,12 @@ const EditTransaction = ({ navigation, route }) => {
             }
         } catch (error) {
             console.error('Failed to save transaction:', error);
+            Alert.alert('Error', 'Failed to save transaction. Please try again.');
+            return;
         }
 
-        if (navigation.canGoBack()) {
-            navigation.goBack();
-        } else {
-            navigation.navigate('Insights');
-        }
+        // Navigate to Insights to refresh the transaction list with updated data
+        navigation.navigate('Insights');
     };
 
     const filteredCategories = (categories || []).filter(cat =>
