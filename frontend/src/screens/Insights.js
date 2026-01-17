@@ -1247,7 +1247,7 @@ const Insights = () => {
                                     <X size={24} color="#FFF" />
                                 </TouchableOpacity>
                             </View>
-                            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 150 }}>
+                            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 250 }}>
                                 {(() => {
                                     if (!drillDownGroup) return null;
 
