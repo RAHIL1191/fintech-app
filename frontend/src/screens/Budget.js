@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Platform, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Menu, Plus, AlignJustify, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Menu, Plus, AlignJustify, ChevronLeft, ChevronRight, X, Info, Check } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
 import { useIsFocused } from '@react-navigation/native';
 import api from '../config/api';
@@ -14,6 +14,8 @@ const Budget = ({ navigation }) => {
     const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('en-US', { month: 'short' }));
     const [budgets, setBudgets] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showProgressModal, setShowProgressModal] = useState(false);
+    const [selectedBudgetIds, setSelectedBudgetIds] = useState(new Set());
     const isFocused = useIsFocused();
 
     useEffect(() => {
@@ -26,7 +28,12 @@ const Budget = ({ navigation }) => {
         try {
             setLoading(true);
             const response = await api.get('/budgets/summary');
-            setBudgets(response.data || []);
+            const fetchedBudgets = response.data || [];
+            setBudgets(fetchedBudgets);
+            // Auto-select all budgets by default on first load
+            if (selectedBudgetIds.size === 0 && fetchedBudgets.length > 0) {
+                setSelectedBudgetIds(new Set(fetchedBudgets.map(b => b.id)));
+            }
         } catch (error) {
             console.error('Failed to fetch budgets:', error);
         } finally {
@@ -34,9 +41,22 @@ const Budget = ({ navigation }) => {
         }
     };
 
-    // Calculate overall totals from fetched budgets
-    const overallSpent = budgets.reduce((sum, b) => sum + (b.spent || 0), 0);
-    const overallLimit = budgets.reduce((sum, b) => sum + (b.limit || b.amount || 0), 0);
+    const toggleBudgetSelection = (budgetId) => {
+        setSelectedBudgetIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(budgetId)) {
+                newSet.delete(budgetId);
+            } else {
+                newSet.add(budgetId);
+            }
+            return newSet;
+        });
+    };
+
+    // Calculate overall totals from SELECTED budgets only
+    const selectedBudgets = budgets.filter(b => selectedBudgetIds.has(b.id));
+    const overallSpent = selectedBudgets.reduce((sum, b) => sum + (b.spent || 0), 0);
+    const overallLimit = selectedBudgets.reduce((sum, b) => sum + (b.limit || b.amount || 0), 0);
 
     const renderHeader = () => (
         <View style={styles.header}>
@@ -98,29 +118,103 @@ const Budget = ({ navigation }) => {
     );
 
     const renderOverallProgress = () => {
-        // Mocking "Spent $0 of $0" from image? Or real calculation? 
-        // User picture showed "Spent $0 of $0" in the Overall card 
-        // BUT list item showed "Spent $105 of $45".
-        // I'll calculate it to be smart, unless they strictly want 0/0.
-        // Let's use the actual totals.
         return (
-            <View style={styles.card}>
+            <TouchableOpacity style={styles.card} onPress={() => setShowProgressModal(true)} activeOpacity={0.7}>
                 <View style={styles.cardHeaderRow}>
-                    <Text style={styles.cardTitle}>Overall Progress</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.cardTitle}>Overall Progress</Text>
+                        <Info size={16} color="#94A3B8" style={{ marginLeft: 6 }} />
+                    </View>
                     <Text style={styles.cardAmount}>${(overallLimit - overallSpent).toFixed(0)}</Text>
                 </View>
-                {/* Text logic: The image had $0 at the top right, probably 'Remaining'? */}
 
                 <View style={styles.progressBarContainer}>
                     <View style={styles.progressBarBackground}>
-                        <View style={[styles.progressBarFill, { width: `${Math.min((overallSpent / overallLimit) * 100, 100)}%`, backgroundColor: overallSpent > overallLimit ? '#DC2626' : '#E2E8F0' }]} />
+                        <View style={[styles.progressBarFill, {
+                            width: overallLimit > 0 ? `${Math.min((overallSpent / overallLimit) * 100, 100)}%` : '0%',
+                            backgroundColor: overallSpent > overallLimit ? '#DC2626' : '#E2E8F0'
+                        }]} />
                     </View>
                     <View style={styles.progressTextOverlay}>
                         <Text style={styles.progressTextInner}>Spent ${overallSpent.toFixed(0)} of ${overallLimit.toFixed(0)}</Text>
                     </View>
                 </View>
-                <Text style={styles.helperText}>Select budgets to include in overall progress.</Text>
-            </View>
+                <Text style={styles.helperText}>Tap to select budgets to include in overall progress.</Text>
+            </TouchableOpacity>
+        );
+    };
+
+    const renderProgressModal = () => {
+        return (
+            <Modal
+                visible={showProgressModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowProgressModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={styles.modalTitle}>Overall Progress</Text>
+                                <Info size={16} color="#3B82F6" style={{ marginLeft: 6 }} />
+                            </View>
+                            <TouchableOpacity onPress={() => setShowProgressModal(false)}>
+                                <X size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.modalSubtitle}>Select budgets to include in overall progress.</Text>
+
+                        <ScrollView style={{ maxHeight: 400 }}>
+                            {budgets.map((budget) => {
+                                const isSelected = selectedBudgetIds.has(budget.id);
+                                const percent = budget.limit > 0 ? (budget.spent / budget.limit) * 100 : 0;
+                                const isOver = budget.spent > budget.limit;
+                                const remaining = budget.limit - budget.spent;
+                                const Icon = LucideIcons[budget.icon] || LucideIcons.DollarSign;
+
+                                return (
+                                    <View key={budget.id} style={styles.modalBudgetItem}>
+                                        <View style={styles.modalBudgetHeader}>
+                                            <View style={styles.budgetLeft}>
+                                                <View style={styles.iconCircle}>
+                                                    <Icon size={24} color="#3B82F6" />
+                                                </View>
+                                                <Text style={styles.budgetName}>{budget.name}</Text>
+                                            </View>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Text style={styles.budgetRemaining}>
+                                                    {remaining < 0 ? `- $${Math.abs(remaining).toFixed(0)}` : `$${remaining.toFixed(0)}`}
+                                                </Text>
+                                                <TouchableOpacity
+                                                    style={[styles.checkbox, isSelected && styles.checkboxSelected]}
+                                                    onPress={() => toggleBudgetSelection(budget.id)}
+                                                >
+                                                    {isSelected && <Check size={16} color="#FFF" />}
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+
+                                        <View style={[styles.itemProgressContainer, { marginTop: 8 }]}>
+                                            <View style={[styles.itemProgressBar, {
+                                                backgroundColor: isOver ? '#EF4444' : '#3B82F6',
+                                                width: '100%',
+                                            }]}>
+                                                <Text style={styles.itemProgressText}>Spent ${budget.spent?.toFixed(0) || 0} of ${budget.limit?.toFixed(0) || 0}</Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.budgetFooter}>
+                                            <Text style={styles.percentText}>{percent.toFixed(1)}%</Text>
+                                            <Text style={styles.periodText}>{budget.period || selectedMonth}</Text>
+                                        </View>
+                                    </View>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         );
     };
 
@@ -194,6 +288,8 @@ const Budget = ({ navigation }) => {
                     )}
                 </View>
             </ScrollView>
+
+            {renderProgressModal()}
         </SafeAreaView>
     );
 };
@@ -371,6 +467,60 @@ const styles = StyleSheet.create({
     },
     percentText: { fontSize: 12, color: '#64748B' },
     periodText: { fontSize: 12, color: '#64748B' },
+
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#FFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 20,
+        maxHeight: '80%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#3B82F6',
+    },
+    modalSubtitle: {
+        fontSize: 14,
+        color: '#64748B',
+        marginBottom: 16,
+    },
+    modalBudgetItem: {
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    modalBudgetHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    checkbox: {
+        width: 24,
+        height: 24,
+        borderRadius: 4,
+        borderWidth: 2,
+        borderColor: '#CBD5E1',
+        marginLeft: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    checkboxSelected: {
+        backgroundColor: '#3B82F6',
+        borderColor: '#3B82F6',
+    },
 
 });
 
