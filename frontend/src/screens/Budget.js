@@ -1,31 +1,42 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, ProgressBarAndroid, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Menu, Plus, AlignJustify, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
+import { useIsFocused } from '@react-navigation/native';
+import api from '../config/api';
 
 const { width } = Dimensions.get('window');
 
 const Budget = ({ navigation }) => {
     const [activeTab, setActiveTab] = useState('BUDGETS'); // BUDGETS | GOALS
     const [typeFilter, setTypeFilter] = useState('Expenses'); // Expenses | Income
-    const [selectedMonth, setSelectedMonth] = useState('Jan');
+    const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('en-US', { month: 'short' }));
+    const [budgets, setBudgets] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const isFocused = useIsFocused();
 
-    // Mock Data to match picture
-    const budgets = [
-        {
-            id: 1,
-            name: 'Hi',
-            icon: 'CircleDollarSign', // Using Lucide icon
-            spent: 105.00,
-            limit: 45.00,
-            color: '#EF4444', // Red for over budget
-            period: 'Jan'
+    useEffect(() => {
+        if (isFocused) {
+            fetchBudgets();
         }
-    ];
+    }, [isFocused]);
 
-    const overallSpent = 105;
-    const overallLimit = 45;
+    const fetchBudgets = async () => {
+        try {
+            setLoading(true);
+            const response = await api.get('/budgets/summary');
+            setBudgets(response.data || []);
+        } catch (error) {
+            console.error('Failed to fetch budgets:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Calculate overall totals from fetched budgets
+    const overallSpent = budgets.reduce((sum, b) => sum + (b.spent || 0), 0);
+    const overallLimit = budgets.reduce((sum, b) => sum + (b.limit || b.amount || 0), 0);
 
     const renderHeader = () => (
         <View style={styles.header}>
@@ -166,7 +177,21 @@ const Budget = ({ navigation }) => {
                 <View style={styles.contentPadding}>
                     {renderOverallProgress()}
 
-                    {budgets.map(renderBudgetItem)}
+                    {loading ? (
+                        <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 40 }} />
+                    ) : budgets.length === 0 ? (
+                        <View style={{ alignItems: 'center', marginTop: 40 }}>
+                            <Text style={{ fontSize: 16, color: '#64748B', marginBottom: 8 }}>No budgets yet</Text>
+                            <TouchableOpacity
+                                style={{ backgroundColor: '#3B82F6', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }}
+                                onPress={() => navigation.navigate('CreateBudget')}
+                            >
+                                <Text style={{ color: '#FFF', fontWeight: '600' }}>Create Your First Budget</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        budgets.map(renderBudgetItem)
+                    )}
                 </View>
             </ScrollView>
         </SafeAreaView>
