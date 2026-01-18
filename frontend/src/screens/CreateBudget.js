@@ -10,20 +10,23 @@ import api from '../config/api';
 
 const { width } = Dimensions.get('window');
 
-const CreateBudget = ({ navigation }) => {
-    const [step, setStep] = useState(1); // 1: Type, 2: CategoryType, 3: Form
-    const [budgetType, setBudgetType] = useState(null); // 'Group' | 'Personal'
-    const [categoryType, setCategoryType] = useState(null); // 'Expense' | 'Income'
+const CreateBudget = ({ navigation, route }) => {
+    // Edit mode params
+    const { budget: existingBudget, editMode } = route.params || {};
+    const isEditMode = !!existingBudget;
+    const [step, setStep] = useState(isEditMode ? 3 : 1); // Skip to form if editing
+    const [budgetType, setBudgetType] = useState(existingBudget?.type || null);
+    const [categoryType, setCategoryType] = useState(existingBudget?.category_type || null);
 
-    // Form State
-    const [budgetName, setBudgetName] = useState('');
-    const [budgetAmount, setBudgetAmount] = useState('');
-    const [recurrence, setRecurrence] = useState('Monthly');
-    const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-    const [selectedCategories, setSelectedCategories] = useState([]);
-    const [selectedAccounts, setSelectedAccounts] = useState([]);
-    const [isRollover, setIsRollover] = useState(false);
-    const [alertPercent, setAlertPercent] = useState(70);
+    // Form State - pre-fill with existing budget data if editing
+    const [budgetName, setBudgetName] = useState(existingBudget?.name || '');
+    const [budgetAmount, setBudgetAmount] = useState(existingBudget?.amount?.toString() || '');
+    const [recurrence, setRecurrence] = useState(existingBudget?.recurrence_frequency || 'Monthly');
+    const [startDate, setStartDate] = useState(existingBudget?.start_date || new Date().toISOString().split('T')[0]);
+    const [selectedCategories, setSelectedCategories] = useState(existingBudget?.categories || []);
+    const [selectedAccounts, setSelectedAccounts] = useState(existingBudget?.accounts || []);
+    const [isRollover, setIsRollover] = useState(existingBudget?.is_rollover || false);
+    const [alertPercent, setAlertPercent] = useState(existingBudget?.alert_percent || 70);
 
     // Modals
     const [showRepeatModal, setShowRepeatModal] = useState(false);
@@ -160,11 +163,24 @@ const CreateBudget = ({ navigation }) => {
         </ScrollView>
     );
 
+    const getEditSubtitle = () => {
+        const monthName = new Date(startDate).toLocaleString('en-US', { month: 'long' });
+        if (editMode === 'all_future') {
+            return `Editing ${monthName} and all occurrences after this.`;
+        } else if (editMode === 'this_only') {
+            return `Editing ${monthName} only`;
+        }
+        return null;
+    };
+
     const renderStep3 = () => (
         <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
             {/* Read-only Type Field */}
             <View style={styles.inputGroup}>
-                <Text style={styles.label}>Type <Text style={{ fontWeight: '700' }}>{categoryType}</Text></Text>
+                <Text style={styles.label}>Type <Text style={{ fontWeight: '700' }}>{categoryType || 'Expense'}</Text></Text>
+                {isEditMode && (
+                    <Text style={styles.editSubtitle}>{getEditSubtitle()}</Text>
+                )}
             </View>
 
             {/* Budget Name */}
@@ -387,7 +403,7 @@ const CreateBudget = ({ navigation }) => {
                 <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
                     <ArrowLeft size={24} color="#3B82F6" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Create Budget</Text>
+                <Text style={styles.headerTitle}>{isEditMode ? 'Edit Budget' : 'Create Budget'}</Text>
                 <View style={{ width: 24 }} />
             </View>
 
@@ -402,7 +418,7 @@ const CreateBudget = ({ navigation }) => {
             {step === 3 && (
                 <View style={styles.footer}>
                     <TouchableOpacity style={styles.nextBtn} onPress={handleCreateBudget}>
-                        <Text style={styles.nextBtnText}>CREATE BUDGET</Text>
+                        <Text style={styles.nextBtnText}>{isEditMode ? 'NEXT ›' : 'CREATE BUDGET'}</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -508,6 +524,7 @@ const styles = StyleSheet.create({
         padding: 16,
     },
     label: { fontSize: 14, color: '#64748B', textAlign: 'center' },
+    editSubtitle: { fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 4 },
     // Fix alignment for type label
 
     inputContainer: {
