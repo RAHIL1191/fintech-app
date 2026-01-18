@@ -1208,7 +1208,9 @@ const Insights = () => {
                                 </View>
                                 <View style={{ flex: 1, marginHorizontal: 12 }}>
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                        <Text style={styles.spendingName}>{item.name}</Text>
+                                        <Text style={styles.spendingName} numberOfLines={1}>
+                                            {spendingFilter === 'Merchant' ? item.name.split(' ').slice(0, 3).join(' ') : item.name}
+                                        </Text>
                                         <Text style={styles.spendingAmount}>${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
                                     </View>
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
