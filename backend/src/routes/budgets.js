@@ -87,6 +87,74 @@ router.post('/', async (req, res) => {
     }
 });
 
+// PUT /api/budgets/:id - Update existing budget
+router.put('/:id', async (req, res) => {
+    const { id } = req.params;
+    const {
+        name, amount, type, category_type,
+        recurrence_frequency, start_date,
+        categories, accounts, is_rollover, alert_percent
+    } = req.body;
+
+    try {
+        let sql, params;
+
+        if (manager.isPostgres) {
+            sql = `
+                UPDATE budgets SET
+                    name = $1,
+                    amount = $2,
+                    type = $3,
+                    category_type = $4,
+                    recurrence_frequency = $5,
+                    start_date = $6,
+                    categories = $7,
+                    accounts = $8,
+                    is_rollover = $9,
+                    alert_percent = $10,
+                    updated_at = NOW()
+                WHERE id = $11
+                RETURNING *
+            `;
+            params = [
+                name, amount, type || 'Personal', category_type || 'Expense',
+                recurrence_frequency || 'Monthly', start_date,
+                JSON.stringify(categories || []), JSON.stringify(accounts || []),
+                is_rollover ? 1 : 0, alert_percent || 70, id
+            ];
+            const { rows } = await manager.pool.query(sql, params);
+            res.json(rows[0]);
+        } else {
+            sql = `
+                UPDATE budgets SET
+                    name = ?,
+                    amount = ?,
+                    type = ?,
+                    category_type = ?,
+                    recurrence_frequency = ?,
+                    start_date = ?,
+                    categories = ?,
+                    accounts = ?,
+                    is_rollover = ?,
+                    alert_percent = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `;
+            params = [
+                name, amount, type || 'Personal', category_type || 'Expense',
+                recurrence_frequency || 'Monthly', start_date,
+                JSON.stringify(categories || []), JSON.stringify(accounts || []),
+                is_rollover ? 1 : 0, alert_percent || 70, id
+            ];
+            await manager.run(sql, params);
+            res.json({ id, name, amount });
+        }
+    } catch (error) {
+        console.error('Error updating budget:', error);
+        res.status(500).json({ error: 'Failed to update budget' });
+    }
+});
+
 // GET /api/budgets/summary
 // Returns budgets with "spent" amount calculated for the current month
 router.get('/summary', async (req, res) => {

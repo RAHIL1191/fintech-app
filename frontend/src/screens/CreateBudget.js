@@ -66,8 +66,8 @@ const CreateBudget = ({ navigation, route }) => {
             const payload = {
                 name: budgetName,
                 amount: parseFloat(budgetAmount),
-                type: budgetType,
-                category_type: categoryType,
+                type: budgetType || 'Personal',
+                category_type: categoryType || 'Expense',
                 recurrence_frequency: recurrence,
                 start_date: startDate,
                 categories: selectedCategories,
@@ -76,12 +76,22 @@ const CreateBudget = ({ navigation, route }) => {
                 alert_percent: alertPercent
             };
 
-            await api.post('/budgets', payload);
-            Alert.alert('Success', 'Budget created!', [
-                { text: 'OK', onPress: () => navigation.navigate('Budget') }
-            ]);
+            if (isEditMode && existingBudget?.id) {
+                // Update existing budget
+                await api.put(`/budgets/${existingBudget.id}`, payload);
+                Alert.alert('Success', 'Budget updated!', [
+                    { text: 'OK', onPress: () => navigation.navigate('Budget') }
+                ]);
+            } else {
+                // Create new budget
+                await api.post('/budgets', payload);
+                Alert.alert('Success', 'Budget created!', [
+                    { text: 'OK', onPress: () => navigation.navigate('Budget') }
+                ]);
+            }
         } catch (error) {
-            Alert.alert('Error', 'Failed to create budget');
+            console.error('Budget save error:', error);
+            Alert.alert('Error', isEditMode ? 'Failed to update budget' : 'Failed to create budget');
         }
     };
 
@@ -418,7 +428,7 @@ const CreateBudget = ({ navigation, route }) => {
             {step === 3 && (
                 <View style={styles.footer}>
                     <TouchableOpacity style={styles.nextBtn} onPress={handleCreateBudget}>
-                        <Text style={styles.nextBtnText}>{isEditMode ? 'NEXT ›' : 'CREATE BUDGET'}</Text>
+                        <Text style={styles.nextBtnText}>{isEditMode ? 'UPDATE' : 'CREATE BUDGET'}</Text>
                     </TouchableOpacity>
                 </View>
             )}
