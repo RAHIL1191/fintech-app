@@ -47,12 +47,17 @@ export const CATEGORY_TAXONOMY = {
     "Income": {
         icon: "trending-up",
         color: "#22C55E", // Green
-        subcategories: ["Salary", "Bonus", "Freelance", "Investment Return", "Gift", "Refund", "Bank Fees Refund", "INCOME"]
+        subcategories: ["Salary", "Bonus", "Freelance", "Investment Return", "Refund", "Bank Fees Refund", "INCOME"]
+    },
+    "Gifts & Donations": {
+        icon: "gift",
+        color: "#F43F5E", // Rose
+        subcategories: ["Gift", "Gifts", "Charity", "Donations", "Birthday", "Wedding", "Holiday"]
     },
     "Other": {
         icon: "more-horizontal",
         color: "#64748B", // Slate
-        subcategories: ["Charity", "Miscellaneous", "Unknown", "General Services", "GENERAL_SERVICES", "Government And Non Profit", "GOVERNMENT_AND_NON_PROFIT"]
+        subcategories: ["Miscellaneous", "Unknown", "General Services", "GENERAL_SERVICES", "Government And Non Profit", "GOVERNMENT_AND_NON_PROFIT"]
     }
 };
 
