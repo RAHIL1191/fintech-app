@@ -58,7 +58,10 @@ router.post('/', async (req, res) => {
 
         let result;
         if (manager.isPostgres) {
-            const { rows } = await manager.pool.query(sql.replace(/\?/g, (_, i) => `$${i + 1}`), params);
+            // Replace ? with $1, $2, etc for PostgreSQL
+            let paramIndex = 0;
+            const pgSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
+            const { rows } = await manager.pool.query(pgSql, params);
             result = rows[0];
         } else {
             // SQLite manual RETURNING handling if needed, or just insert and fetch
