@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
 
 const BudgetDetails = ({ navigation, route }) => {
     const { budget } = route.params || {};
     const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('en-US', { month: 'short' }));
+    const [showEditModal, setShowEditModal] = useState(false);
 
     if (!budget) {
         return (
@@ -37,6 +38,18 @@ const BudgetDetails = ({ navigation, route }) => {
         }).replace(',', '');
     };
 
+    const handleEditThisOnly = () => {
+        setShowEditModal(false);
+        // Navigate to edit screen for this occurrence only
+        navigation.navigate('CreateBudget', { budget, editMode: 'this_only' });
+    };
+
+    const handleEditAllFuture = () => {
+        setShowEditModal(false);
+        // Navigate to edit screen for all future occurrences
+        navigation.navigate('CreateBudget', { budget, editMode: 'all_future' });
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header */}
@@ -46,7 +59,7 @@ const BudgetDetails = ({ navigation, route }) => {
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Budget</Text>
                 <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.headerBtn}>
+                    <TouchableOpacity style={styles.headerBtn} onPress={() => setShowEditModal(true)}>
                         <Pencil size={20} color="#3B82F6" />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.headerBtn}>
@@ -135,6 +148,39 @@ const BudgetDetails = ({ navigation, route }) => {
                     <Text style={styles.timestampText}>Last updated {formatDate(budget.updated_at)}</Text>
                 </View>
             </ScrollView>
+
+            {/* Edit Options Modal */}
+            <Modal
+                visible={showEditModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowEditModal(false)}
+            >
+                <View style={styles.editModalOverlay}>
+                    <View style={styles.editModalContent}>
+                        <View style={styles.editModalHeader}>
+                            <Text style={styles.editModalTitle}>
+                                Edit all occurrences of this repeat entry, or this occurrence only?
+                            </Text>
+                            <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                                <X size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity style={styles.editOption} onPress={handleEditThisOnly}>
+                            <Text style={styles.editOptionTitle}>This only</Text>
+                            <Text style={styles.editOptionSubtitle}>Edit {selectedMonth} 1 occurrence only</Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.editOptionDivider} />
+
+                        <TouchableOpacity style={styles.editOption} onPress={handleEditAllFuture}>
+                            <Text style={styles.editOptionTitle}>This & All future</Text>
+                            <Text style={styles.editOptionSubtitle}>Edit {selectedMonth} 1 and all occurrences after this</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -287,6 +333,50 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#94A3B8',
         marginBottom: 4,
+    },
+    // Edit Modal Styles
+    editModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    editModalContent: {
+        backgroundColor: '#FFF',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 40,
+    },
+    editModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 24,
+    },
+    editModalTitle: {
+        flex: 1,
+        fontSize: 16,
+        color: '#0F172A',
+        lineHeight: 24,
+        marginRight: 16,
+    },
+    editOption: {
+        paddingVertical: 16,
+    },
+    editOptionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#0F172A',
+        marginBottom: 4,
+    },
+    editOptionSubtitle: {
+        fontSize: 14,
+        color: '#64748B',
+    },
+    editOptionDivider: {
+        height: 1,
+        backgroundColor: '#E2E8F0',
     },
 });
 
