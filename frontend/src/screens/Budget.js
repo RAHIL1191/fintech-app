@@ -226,7 +226,12 @@ const Budget = ({ navigation }) => {
         const Icon = LucideIcons[item.icon] || LucideIcons.DollarSign;
 
         return (
-            <View key={item.id} style={styles.budgetItem}>
+            <TouchableOpacity
+                key={item.id}
+                style={styles.budgetItem}
+                onPress={() => navigation.navigate('BudgetDetails', { budget: item })}
+                activeOpacity={0.7}
+            >
                 <View style={styles.budgetHeader}>
                     <View style={styles.budgetLeft}>
                         <View style={styles.iconCircle}>
@@ -254,7 +259,7 @@ const Budget = ({ navigation }) => {
                     <Text style={styles.percentText}>{percent.toFixed(1)}%</Text>
                     <Text style={styles.periodText}>{item.period}</Text>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 
