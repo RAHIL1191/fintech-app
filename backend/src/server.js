@@ -48,11 +48,13 @@ const client = new PlaidApi(configuration);
 
 // Import route modules
 const billsRoutes = require('./routes/bills');
+const budgetsRoutes = require('./routes/budgets');
 
 // --- Routes ---
 
 // API Routes
 app.use('/api/bills', billsRoutes);
+app.use('/api/budgets', budgetsRoutes);
 
 app.get('/', (req, res) => {
     res.json({ status: 'ok', message: 'FinTech Backend API is live', mode: process.env.PLAID_ENV });
