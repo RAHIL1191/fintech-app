@@ -155,6 +155,28 @@ router.put('/:id', async (req, res) => {
     }
 });
 
+// DELETE /api/budgets/:id - Delete a budget
+router.delete('/:id', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        let sql;
+
+        if (manager.isPostgres) {
+            sql = `DELETE FROM budgets WHERE id = $1`;
+            await manager.pool.query(sql, [id]);
+        } else {
+            sql = `DELETE FROM budgets WHERE id = ?`;
+            await manager.run(sql, [id]);
+        }
+
+        res.json({ success: true, message: 'Budget deleted' });
+    } catch (error) {
+        console.error('Error deleting budget:', error);
+        res.status(500).json({ error: 'Failed to delete budget' });
+    }
+});
+
 // GET /api/budgets/summary
 // Returns budgets with "spent" amount calculated for the current month
 router.get('/summary', async (req, res) => {

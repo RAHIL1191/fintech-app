@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X } from 'lucide-react-native';
+import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X, Info } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
+import api from '../config/api';
 
 const BudgetDetails = ({ navigation, route }) => {
     const { budget } = route.params || {};
     const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('en-US', { month: 'short' }));
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showOptionsModal, setShowOptionsModal] = useState(false);
+    const [overspendingAlert, setOverspendingAlert] = useState(true);
+    const [spendingAlert, setSpendingAlert] = useState(true);
 
     if (!budget) {
         return (
@@ -50,6 +54,62 @@ const BudgetDetails = ({ navigation, route }) => {
         navigation.navigate('CreateBudget', { budget, editMode: 'all_future' });
     };
 
+    const getNextMonth = () => {
+        const now = new Date();
+        now.setMonth(now.getMonth() + 1);
+        return now.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    const handleStopBudget = () => {
+        setShowOptionsModal(false);
+        Alert.alert(
+            'Stop Budget',
+            `Are you sure you want to stop tracking this budget? It will not be available from ${getNextMonth()}.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Stop',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await api.put(`/budgets/${budget.id}`, { ...budget, is_active: 0 });
+                            Alert.alert('Success', 'Budget stopped!', [
+                                { text: 'OK', onPress: () => navigation.navigate('Budget') }
+                            ]);
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to stop budget');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleDeleteBudget = () => {
+        setShowOptionsModal(false);
+        Alert.alert(
+            'Delete Budget',
+            'Are you sure you want to permanently delete this budget? This action cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await api.delete(`/budgets/${budget.id}`);
+                            Alert.alert('Success', 'Budget deleted!', [
+                                { text: 'OK', onPress: () => navigation.navigate('Budget') }
+                            ]);
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to delete budget');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header */}
@@ -62,7 +122,7 @@ const BudgetDetails = ({ navigation, route }) => {
                     <TouchableOpacity style={styles.headerBtn} onPress={() => setShowEditModal(true)}>
                         <Pencil size={20} color="#3B82F6" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.headerBtn}>
+                    <TouchableOpacity style={styles.headerBtn} onPress={() => setShowOptionsModal(true)}>
                         <MoreVertical size={20} color="#0F172A" />
                     </TouchableOpacity>
                 </View>
@@ -178,6 +238,64 @@ const BudgetDetails = ({ navigation, route }) => {
                             <Text style={styles.editOptionTitle}>This & All future</Text>
                             <Text style={styles.editOptionSubtitle}>Edit {selectedMonth} 1 and all occurrences after this</Text>
                         </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Options Modal */}
+            <Modal
+                visible={showOptionsModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowOptionsModal(false)}
+            >
+                <View style={styles.editModalOverlay}>
+                    <View style={styles.optionsModalContent}>
+                        <View style={styles.optionsModalHeader}>
+                            <Text style={styles.optionsModalTitle}>Options</Text>
+                            <TouchableOpacity onPress={() => setShowOptionsModal(false)}>
+                                <X size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Stop Budget Button */}
+                        <TouchableOpacity style={styles.stopBudgetBtn} onPress={handleStopBudget}>
+                            <Text style={styles.stopBudgetText}>Stop Budget</Text>
+                        </TouchableOpacity>
+                        <View style={styles.optionHint}>
+                            <Info size={14} color="#94A3B8" />
+                            <Text style={styles.optionHintText}>This budget will not be available to track from {getNextMonth()}</Text>
+                        </View>
+
+                        {/* Delete Budget Button */}
+                        <TouchableOpacity style={styles.deleteBudgetBtn} onPress={handleDeleteBudget}>
+                            <Text style={styles.deleteBudgetText}>Delete Budget</Text>
+                        </TouchableOpacity>
+                        <View style={styles.optionHint}>
+                            <Info size={14} color="#94A3B8" />
+                            <Text style={styles.optionHintText}>This budget will be deleted permanently.</Text>
+                        </View>
+
+                        {/* Alert Toggles */}
+                        <View style={styles.alertToggleRow}>
+                            <Text style={styles.alertLabel}>Overspending alert</Text>
+                            <Switch
+                                trackColor={{ false: "#E2E8F0", true: "#3B82F6" }}
+                                thumbColor="#FFF"
+                                onValueChange={setOverspendingAlert}
+                                value={overspendingAlert}
+                            />
+                        </View>
+
+                        <View style={styles.alertToggleRow}>
+                            <Text style={styles.alertLabel}>Spending alert</Text>
+                            <Switch
+                                trackColor={{ false: "#E2E8F0", true: "#3B82F6" }}
+                                thumbColor="#FFF"
+                                onValueChange={setSpendingAlert}
+                                value={spendingAlert}
+                            />
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -377,6 +495,74 @@ const styles = StyleSheet.create({
     editOptionDivider: {
         height: 1,
         backgroundColor: '#E2E8F0',
+    },
+    // Options Modal Styles
+    optionsModalContent: {
+        backgroundColor: '#FFF',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 40,
+    },
+    optionsModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    optionsModalTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#0F172A',
+    },
+    stopBudgetBtn: {
+        backgroundColor: '#3B82F6',
+        borderRadius: 12,
+        paddingVertical: 16,
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    stopBudgetText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    deleteBudgetBtn: {
+        backgroundColor: '#3B82F6',
+        borderRadius: 12,
+        paddingVertical: 16,
+        alignItems: 'center',
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    deleteBudgetText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    optionHint: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
+    optionHintText: {
+        fontSize: 12,
+        color: '#94A3B8',
+        flex: 1,
+    },
+    alertToggleRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F1F5F9',
+    },
+    alertLabel: {
+        fontSize: 16,
+        color: '#0F172A',
     },
 });
 
