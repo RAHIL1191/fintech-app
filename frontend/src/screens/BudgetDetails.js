@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X, Info } from 'lucide-react-native';
+import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X, AlertCircle } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
 import api from '../config/api';
 
@@ -263,7 +263,7 @@ const BudgetDetails = ({ navigation, route }) => {
                             <Text style={styles.stopBudgetText}>Stop Budget</Text>
                         </TouchableOpacity>
                         <View style={styles.optionHint}>
-                            <Info size={14} color="#94A3B8" />
+                            <AlertCircle size={14} color="#94A3B8" />
                             <Text style={styles.optionHintText}>This budget will not be available to track from {getNextMonth()}</Text>
                         </View>
 
@@ -272,7 +272,7 @@ const BudgetDetails = ({ navigation, route }) => {
                             <Text style={styles.deleteBudgetText}>Delete Budget</Text>
                         </TouchableOpacity>
                         <View style={styles.optionHint}>
-                            <Info size={14} color="#94A3B8" />
+                            <AlertCircle size={14} color="#94A3B8" />
                             <Text style={styles.optionHintText}>This budget will be deleted permanently.</Text>
                         </View>
 
