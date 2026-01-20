@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X, AlertCircle } from 'lucide-react-native';
+import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X, AlertCircle, DollarSign } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
 import api from '../config/api';
 
 const BudgetDetails = ({ navigation, route }) => {
     const { budget } = route.params || {};
     const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('en-US', { month: 'short' }));
+
+    console.log('BudgetDetails Params:', route.params);
+    console.log('Budget Data:', budget);
+
     const [showEditModal, setShowEditModal] = useState(false);
     const [showOptionsModal, setShowOptionsModal] = useState(false);
     const [overspendingAlert, setOverspendingAlert] = useState(true);
@@ -28,7 +32,7 @@ const BudgetDetails = ({ navigation, route }) => {
     const overAmount = isOver ? spent - limit : 0;
     const percent = limit > 0 ? (spent / limit) * 100 : 0;
 
-    const Icon = LucideIcons[budget.icon] || LucideIcons.DollarSign;
+    const Icon = (budget.icon && LucideIcons[budget.icon]) ? LucideIcons[budget.icon] : DollarSign;
 
     const formatDate = (dateStr) => {
         if (!dateStr) return 'N/A';
