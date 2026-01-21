@@ -87,6 +87,84 @@ router.post('/', async (req, res) => {
     }
 });
 
+// GET /api/budgets/summary
+// Returns budgets with "spent" amount calculated for the current month
+router.get('/summary', async (req, res) => {
+    try {
+        // 1. Get all budgets
+        const budgets = await manager.all('SELECT * FROM budgets WHERE is_active = 1');
+
+        // 2. Calculate spent for each budget for THIS MONTH
+        // This requires aggregating transactions.
+        // For simplicity, we'll fetch ALL transactions for this month and categorize them in js
+        // (Performance might be hit if thousands of txs, but fine for now)
+
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+        // Fetch transactions (Unified query from older implementation of Expenses?)
+        // Let's assume we look at transaction_metadata + cached_transactions + manual_transactions
+        // Actually, let's just use `cached_transactions` + `manual_transactions` logic or a simplified view if available.
+        // Or simpler: Just fetch relevant transactions based on categories.
+
+        // Get all transactions for the month
+        // We'll use a UNION ALL if possible or just two queries.
+
+        const manualTxs = await manager.all(`
+            SELECT amount, category, date FROM manual_transactions 
+            WHERE date >= ? AND date <= ?
+        `, [startOfMonth, endOfMonth]);
+
+        const plaidTxs = await manager.all(`
+            SELECT amount, category, date FROM cached_transactions 
+            WHERE date >= ? AND date <= ?
+        `, [startOfMonth, endOfMonth]);
+
+        const allTxs = [...manualTxs, ...plaidTxs];
+
+        const summary = budgets.map(b => {
+            const budgetCats = b.categories ? JSON.parse(b.categories) : [];
+            const budgetAccounts = b.accounts ? JSON.parse(b.accounts) : [];
+            // Filter txs that match this budget
+            // If categories empty -> assume ALL? Or none?
+            // User text said: "All categories are included if not selected any"
+
+            const relevantTxs = allTxs.filter(tx => {
+                // 1. Check Category
+                if (budgetCats.length > 0) {
+                    // Simple inclusion check. 
+                    // TODO: Handle subcategories logic if needed (e.g. "Food" includes "Food -> Restaurants")
+                    // For now exact match or simple inclusion
+                    if (!budgetCats.includes(tx.category)) return false;
+                }
+
+                // 2. Check Account (if we had account_id in txs, which we do but didn't select above)
+                // For now ignore account filter for MVP speed
+
+                return true;
+            });
+
+            const spent = relevantTxs.reduce((sum, tx) => sum + (tx.amount > 0 ? tx.amount : 0), 0); // Assume positive is expense? Plaid is usually +ve for expense.
+
+            return {
+                ...b,
+                categories: budgetCats,
+                spent: spent,
+                limit: b.amount,
+                period: new Date().toLocaleString('en-US', { month: 'short' }),
+                icon: 'DollarSign' // Placeholder
+            };
+        });
+
+        res.json(summary);
+
+    } catch (error) {
+        console.error('Error fetching budget summary:', error);
+        res.status(500).json({ error: 'Failed to fetch summary' });
+    }
+});
+
 // GET /api/budgets/:id - Get specific budget details for a month
 router.get('/:id', async (req, res) => {
     const { id } = req.params;
@@ -235,82 +313,6 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
-// GET /api/budgets/summary
-// Returns budgets with "spent" amount calculated for the current month
-router.get('/summary', async (req, res) => {
-    try {
-        // 1. Get all budgets
-        const budgets = await manager.all('SELECT * FROM budgets WHERE is_active = 1');
 
-        // 2. Calculate spent for each budget for THIS MONTH
-        // This requires aggregating transactions.
-        // For simplicity, we'll fetch ALL transactions for this month and categorize them in js
-        // (Performance might be hit if thousands of txs, but fine for now)
-
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-
-        // Fetch transactions (Unified query from older implementation of Expenses?)
-        // Let's assume we look at transaction_metadata + cached_transactions + manual_transactions
-        // Actually, let's just use `cached_transactions` + `manual_transactions` logic or a simplified view if available.
-        // Or simpler: Just fetch relevant transactions based on categories.
-
-        // Get all transactions for the month
-        // We'll use a UNION ALL if possible or just two queries.
-
-        const manualTxs = await manager.all(`
-            SELECT amount, category, date FROM manual_transactions 
-            WHERE date >= ? AND date <= ?
-        `, [startOfMonth, endOfMonth]);
-
-        const plaidTxs = await manager.all(`
-            SELECT amount, category, date FROM cached_transactions 
-            WHERE date >= ? AND date <= ?
-        `, [startOfMonth, endOfMonth]);
-
-        const allTxs = [...manualTxs, ...plaidTxs];
-
-        const summary = budgets.map(b => {
-            const budgetCats = b.categories ? JSON.parse(b.categories) : [];
-            const budgetAccounts = b.accounts ? JSON.parse(b.accounts) : [];
-            // Filter txs that match this budget
-            // If categories empty -> assume ALL? Or none?
-            // User text said: "All categories are included if not selected any"
-
-            const relevantTxs = allTxs.filter(tx => {
-                // 1. Check Category
-                if (budgetCats.length > 0) {
-                    // Simple inclusion check. 
-                    // TODO: Handle subcategories logic if needed (e.g. "Food" includes "Food -> Restaurants")
-                    // For now exact match or simple inclusion
-                    if (!budgetCats.includes(tx.category)) return false;
-                }
-
-                // 2. Check Account (if we had account_id in txs, which we do but didn't select above)
-                // For now ignore account filter for MVP speed
-
-                return true;
-            });
-
-            const spent = relevantTxs.reduce((sum, tx) => sum + (tx.amount > 0 ? tx.amount : 0), 0); // Assume positive is expense? Plaid is usually +ve for expense.
-
-            return {
-                ...b,
-                categories: budgetCats,
-                spent: spent,
-                limit: b.amount,
-                period: new Date().toLocaleString('en-US', { month: 'short' }),
-                icon: 'DollarSign' // Placeholder
-            };
-        });
-
-        res.json(summary);
-
-    } catch (error) {
-        console.error('Error fetching budget summary:', error);
-        res.status(500).json({ error: 'Failed to fetch summary' });
-    }
-});
 
 module.exports = router;
