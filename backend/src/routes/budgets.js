@@ -87,6 +87,64 @@ router.post('/', async (req, res) => {
     }
 });
 
+// GET /api/budgets/:id - Get specific budget details for a month
+router.get('/:id', async (req, res) => {
+    const { id } = req.params;
+    const { month, year } = req.query; // optional, defaults to current
+
+    try {
+        const budget = await manager.get('SELECT * FROM budgets WHERE id = ?', [id]);
+        if (!budget) {
+            return res.status(404).json({ error: 'Budget not found' });
+        }
+
+        const now = new Date();
+        const targetYear = year ? parseInt(year) : now.getFullYear();
+        const targetMonth = month ? parseInt(month) : now.getMonth() + 1; // 1-12
+
+        const startOfMonth = new Date(targetYear, targetMonth - 1, 1).toISOString().split('T')[0];
+        const endOfMonth = new Date(targetYear, targetMonth, 0).toISOString().split('T')[0];
+
+        // Fetch transactions for this store logic
+        const manualTxs = await manager.all(`
+            SELECT amount, category, date FROM manual_transactions 
+            WHERE date >= ? AND date <= ?
+        `, [startOfMonth, endOfMonth]);
+
+        const plaidTxs = await manager.all(`
+            SELECT amount, category, date FROM cached_transactions 
+            WHERE date >= ? AND date <= ?
+        `, [startOfMonth, endOfMonth]);
+
+        const allTxs = [...manualTxs, ...plaidTxs];
+
+        const budgetCats = budget.categories ? JSON.parse(budget.categories) : [];
+
+        const relevantTxs = allTxs.filter(tx => {
+            if (budgetCats.length > 0) {
+                if (!budgetCats.includes(tx.category)) return false;
+            }
+            return true;
+        });
+
+        const spent = relevantTxs.reduce((sum, tx) => sum + (tx.amount > 0 ? tx.amount : 0), 0);
+
+        const result = {
+            ...budget,
+            categories: budgetCats,
+            accounts: budget.accounts ? JSON.parse(budget.accounts) : [],
+            spent: spent,
+            limit: budget.amount,
+            period: new Date(targetYear, targetMonth - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' })
+        };
+
+        res.json(result);
+    } catch (error) {
+        console.error('Error fetching budget details:', error);
+        res.status(500).json({ error: 'Failed to fetch budget details' });
+    }
+});
+
 // PUT /api/budgets/:id - Update existing budget
 router.put('/:id', async (req, res) => {
     const { id } = req.params;

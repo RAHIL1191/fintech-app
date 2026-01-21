@@ -6,13 +6,35 @@ import * as LucideIcons from 'lucide-react-native';
 import api from '../config/api';
 
 const BudgetDetails = ({ navigation, route }) => {
-    const { budget } = route.params || {};
-    const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('en-US', { month: 'short' }));
+    const { budget: initialBudget } = route.params || {};
+    const [budget, setBudget] = useState(initialBudget);
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [loading, setLoading] = useState(false);
 
+    // State for modals
     const [showEditModal, setShowEditModal] = useState(false);
     const [showOptionsModal, setShowOptionsModal] = useState(false);
     const [overspendingAlert, setOverspendingAlert] = useState(true);
     const [spendingAlert, setSpendingAlert] = useState(true);
+
+    useEffect(() => {
+        fetchBudgetDetails();
+    }, [currentDate]);
+
+    const fetchBudgetDetails = async () => {
+        if (!initialBudget?.id) return;
+        try {
+            setLoading(true);
+            const month = currentDate.getMonth() + 1;
+            const year = currentDate.getFullYear();
+            const response = await api.get(`/budgets/${initialBudget.id}?month=${month}&year=${year}`);
+            setBudget(response.data);
+        } catch (error) {
+            console.error('Failed to fetch budget details:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     if (!budget) {
         return (
@@ -32,6 +54,10 @@ const BudgetDetails = ({ navigation, route }) => {
     // Safe Icon resolution
     const Icon = (budget.icon && LucideIcons[budget.icon]) ? LucideIcons[budget.icon] : DollarSign;
 
+    const formatMonth = (date) => {
+        return date.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+    };
+
     const formatDate = (dateStr) => {
         if (!dateStr) return 'N/A';
         const d = new Date(dateStr);
@@ -42,6 +68,18 @@ const BudgetDetails = ({ navigation, route }) => {
             minute: '2-digit',
             hour12: true
         }).replace(',', '');
+    };
+
+    const handlePrevMonth = () => {
+        const newDate = new Date(currentDate);
+        newDate.setMonth(newDate.getMonth() - 1);
+        setCurrentDate(newDate);
+    };
+
+    const handleNextMonth = () => {
+        const newDate = new Date(currentDate);
+        newDate.setMonth(newDate.getMonth() + 1);
+        setCurrentDate(newDate);
     };
 
     const handleEditThisOnly = () => {
@@ -133,11 +171,11 @@ const BudgetDetails = ({ navigation, route }) => {
             <ScrollView style={styles.content}>
                 {/* Month Selector */}
                 <View style={styles.monthRow}>
-                    <TouchableOpacity>
+                    <TouchableOpacity onPress={handlePrevMonth}>
                         <ChevronLeft size={24} color="#64748B" />
                     </TouchableOpacity>
-                    <Text style={styles.monthText}>{selectedMonth}</Text>
-                    <TouchableOpacity>
+                    <Text style={styles.monthText}>{formatMonth(currentDate)}</Text>
+                    <TouchableOpacity onPress={handleNextMonth}>
                         <ChevronRight size={24} color="#64748B" />
                     </TouchableOpacity>
                 </View>
@@ -231,14 +269,14 @@ const BudgetDetails = ({ navigation, route }) => {
 
                         <TouchableOpacity style={styles.editOption} onPress={handleEditThisOnly}>
                             <Text style={styles.editOptionTitle}>This only</Text>
-                            <Text style={styles.editOptionSubtitle}>Edit {selectedMonth} 1 occurrence only</Text>
+                            <Text style={styles.editOptionSubtitle}>Edit {formatMonth(currentDate)} 1 occurrence only</Text>
                         </TouchableOpacity>
 
                         <View style={styles.editOptionDivider} />
 
                         <TouchableOpacity style={styles.editOption} onPress={handleEditAllFuture}>
                             <Text style={styles.editOptionTitle}>This & All future</Text>
-                            <Text style={styles.editOptionSubtitle}>Edit {selectedMonth} 1 and all occurrences after this</Text>
+                            <Text style={styles.editOptionSubtitle}>Edit {formatMonth(currentDate)} 1 and all occurrences after this</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
