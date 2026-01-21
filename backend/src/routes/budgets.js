@@ -185,12 +185,12 @@ router.get('/:id', async (req, res) => {
 
         // Fetch transactions for this store logic
         const manualTxs = await manager.all(`
-            SELECT amount, category, date FROM manual_transactions 
+            SELECT * FROM manual_transactions 
             WHERE date >= ? AND date <= ?
         `, [startOfMonth, endOfMonth]);
 
         const plaidTxs = await manager.all(`
-            SELECT amount, category, date FROM cached_transactions 
+            SELECT * FROM cached_transactions 
             WHERE date >= ? AND date <= ?
         `, [startOfMonth, endOfMonth]);
 
@@ -213,7 +213,8 @@ router.get('/:id', async (req, res) => {
             accounts: budget.accounts ? JSON.parse(budget.accounts) : [],
             spent: spent,
             limit: budget.amount,
-            period: new Date(targetYear, targetMonth - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' })
+            period: new Date(targetYear, targetMonth - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+            transactions: relevantTxs
         };
 
         res.json(result);

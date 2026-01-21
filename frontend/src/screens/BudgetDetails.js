@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X, AlertCircle, DollarSign } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
 import api from '../config/api';
+import BudgetTransactionsModal from '../components/BudgetTransactionsModal';
 
 const BudgetDetails = ({ navigation, route }) => {
     const { budget: initialBudget } = route.params || {};
@@ -14,6 +15,7 @@ const BudgetDetails = ({ navigation, route }) => {
     // State for modals
     const [showEditModal, setShowEditModal] = useState(false);
     const [showOptionsModal, setShowOptionsModal] = useState(false);
+    const [showExpensesModal, setShowExpensesModal] = useState(false);
     const [overspendingAlert, setOverspendingAlert] = useState(true);
     const [spendingAlert, setSpendingAlert] = useState(true);
 
@@ -236,7 +238,7 @@ const BudgetDetails = ({ navigation, route }) => {
 
                 <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Expenses</Text>
-                    <TouchableOpacity style={styles.detailValue}>
+                    <TouchableOpacity style={styles.detailValue} onPress={() => setShowExpensesModal(true)}>
                         <Text style={styles.detailAmount}>${spent.toFixed(0)}</Text>
                         <ChevronRight size={16} color="#94A3B8" />
                     </TouchableOpacity>
@@ -339,6 +341,14 @@ const BudgetDetails = ({ navigation, route }) => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Transactions Modal */}
+            <BudgetTransactionsModal
+                visible={showExpensesModal}
+                onClose={() => setShowExpensesModal(false)}
+                transactions={budget.transactions || []}
+                budgetName={budget.name}
+            />
         </SafeAreaView>
     );
 };
