@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Platform, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Menu, Plus, AlignJustify, ChevronLeft, ChevronRight, X, Info, Check } from 'lucide-react-native';
+import { Menu, Plus, AlignJustify, ChevronLeft, ChevronRight, X, AlertCircle, Check } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
 import { useIsFocused } from '@react-navigation/native';
 import api from '../config/api';
@@ -123,7 +123,7 @@ const Budget = ({ navigation }) => {
                 <View style={styles.cardHeaderRow}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={styles.cardTitle}>Overall Progress</Text>
-                        <Info size={16} color="#94A3B8" style={{ marginLeft: 6 }} />
+                        <AlertCircle size={16} color="#94A3B8" style={{ marginLeft: 6 }} />
                     </View>
                     <Text style={styles.cardAmount}>${(overallLimit - overallSpent).toFixed(0)}</Text>
                 </View>
@@ -157,7 +157,7 @@ const Budget = ({ navigation }) => {
                         <View style={styles.modalHeader}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={styles.modalTitle}>Overall Progress</Text>
-                                <Info size={16} color="#3B82F6" style={{ marginLeft: 6 }} />
+                                <AlertCircle size={16} color="#3B82F6" style={{ marginLeft: 6 }} />
                             </View>
                             <TouchableOpacity onPress={() => setShowProgressModal(false)}>
                                 <X size={24} color="#64748B" />
