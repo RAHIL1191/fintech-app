@@ -5,6 +5,7 @@ import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X, AlertCir
 import * as LucideIcons from 'lucide-react-native';
 import api from '../config/api';
 import BudgetTransactionsModal from '../components/BudgetTransactionsModal';
+import BudgetCategoriesModal from '../components/BudgetCategoriesModal';
 
 const BudgetDetails = ({ navigation, route }) => {
     const { budget: initialBudget } = route.params || {};
@@ -16,6 +17,7 @@ const BudgetDetails = ({ navigation, route }) => {
     const [showEditModal, setShowEditModal] = useState(false);
     const [showOptionsModal, setShowOptionsModal] = useState(false);
     const [showExpensesModal, setShowExpensesModal] = useState(false);
+    const [showCategoriesModal, setShowCategoriesModal] = useState(false);
     const [overspendingAlert, setOverspendingAlert] = useState(true);
     const [spendingAlert, setSpendingAlert] = useState(true);
 
@@ -244,6 +246,15 @@ const BudgetDetails = ({ navigation, route }) => {
                     </TouchableOpacity>
                 </View>
 
+                {budget.categories && budget.categories.length > 0 && (
+                    <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Categories</Text>
+                        <TouchableOpacity style={styles.detailValue} onPress={() => setShowCategoriesModal(true)}>
+                            <ChevronRight size={16} color="#94A3B8" />
+                        </TouchableOpacity>
+                    </View>
+                )}
+
                 {/* Timestamps */}
                 <View style={styles.timestamps}>
                     <Text style={styles.timestampText}>Created On {formatDate(budget.created_at)}</Text>
@@ -347,6 +358,14 @@ const BudgetDetails = ({ navigation, route }) => {
                 visible={showExpensesModal}
                 onClose={() => setShowExpensesModal(false)}
                 transactions={budget.transactions || []}
+                budgetName={budget.name}
+            />
+
+            {/* Categories Modal */}
+            <BudgetCategoriesModal
+                visible={showCategoriesModal}
+                onClose={() => setShowCategoriesModal(false)}
+                categories={budget.categories || []}
                 budgetName={budget.name}
             />
         </SafeAreaView>
