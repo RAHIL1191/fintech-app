@@ -45,21 +45,22 @@ const TransactionDetails = () => {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            if (transaction.is_manual || transaction.transaction_id?.startsWith('manual_')) {
+                            if (transaction.is_manual || String(transaction.transaction_id).startsWith('manual_')) {
                                 await api.delete(`/transactions/${transaction.transaction_id}`);
+
+                                // Navigate back to the previous screen (Insights or Transactions)
+                                if (navigation.canGoBack()) {
+                                    navigation.goBack();
+                                } else {
+                                    navigation.navigate('Transactions');
+                                }
                             } else {
-                                // For Plaid transactions, we might just hide them or clear metadata
-                                // For now, let's assume we can delete manual ones
                                 Alert.alert("Note", "Only manually added transactions can be deleted in this version.");
-                                return;
-                            }
-                            if (navigation.canGoBack()) {
-                                navigation.goBack();
-                            } else {
-                                navigation.navigate('Transactions');
                             }
                         } catch (error) {
-                            console.error('Failed to delete:', error);
+                            console.error('Failed to delete transaction:', error);
+                            const message = error.response?.data?.error || error.message || "Unknown Network Error";
+                            Alert.alert("Delete Failed", `Could not delete transaction.\n\nDebug Info: ${message}`);
                         }
                     }
                 }
@@ -108,9 +109,11 @@ const TransactionDetails = () => {
                     <TouchableOpacity onPress={handleEdit} style={styles.headerButton}>
                         <Pencil size={22} color="#3B82F6" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
-                        <Trash2 size={22} color="#EF4444" />
-                    </TouchableOpacity>
+                    {(transaction.is_manual || String(transaction.transaction_id).startsWith('manual_')) && (
+                        <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
+                            <Trash2 size={22} color="#EF4444" />
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
 

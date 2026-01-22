@@ -245,7 +245,11 @@ app.get('/api/transactions', async (req, res) => {
             console.log(`Backend: Syncing transactions from Plaid for ${items.length} items...`);
             const now = new Date();
             const endDate = now.toISOString().split('T')[0];
-            const startDate = '2023-01-01'; // Default range
+
+            // Optimization: Only sync/prune last 6 months
+            const startObj = new Date();
+            startObj.setMonth(startObj.getMonth() - 6);
+            const startDate = startObj.toISOString().split('T')[0];
 
             const promises = items.map(async (item) => {
                 try {
@@ -259,6 +263,31 @@ app.get('/api/transactions', async (req, res) => {
 
                     // Update cache
                     await db.upsertTransactions(transactions, item.item_id);
+
+                    // --- PRUNING / RECONCILIATION ---
+                    // 1. Get all transaction IDs currently in DB for this item & time range
+                    const cachedIdsSet = await db.getCachedTransactionIds(item.item_id, startDate, endDate);
+
+                    // 2. Get all transaction IDs returned by Plaid now
+                    const plaidIdsSet = new Set(transactions.map(t => t.transaction_id));
+
+                    // 3. Identify stale IDs (In Cache but NOT in Plaid response)
+                    const staleIds = [];
+                    for (const cachedId of cachedIdsSet) {
+                        if (!plaidIdsSet.has(cachedId)) {
+                            staleIds.push(cachedId);
+                        }
+                    }
+
+                    // 4. Delete stale transactions
+                    if (staleIds.length > 0) {
+                        console.log(`Pruning: Found ${staleIds.length} stale transactions for item ${item.item_id}. Deleting...`);
+                        await db.deleteCachedTransactions(staleIds);
+                    } else {
+                        console.log('Pruning: No stale transactions found.');
+                    }
+                    // --------------------------------
+
                     return transactions;
                 } catch (err) {
                     const errorData = err.response ? err.response.data : {};
@@ -679,13 +708,71 @@ app.post('/api/transactions', async (req, res) => {
 });
 
 // Delete Transaction (Manual Only)
+// Delete Transaction (Manual Only)
 app.delete('/api/transactions/:id', async (req, res) => {
     const { id } = req.params;
     console.log(`Attempting to delete transaction with ID: ${id}`);
+
     try {
+        // Handle Split Deletion
+        if (id.includes('_split_')) {
+            const [originalId, splitIndexStr] = id.split('_split_');
+            const splitIndex = parseInt(splitIndexStr, 10);
+
+            const transaction = await db.getManualTransaction(originalId);
+
+            if (!transaction) {
+
+                return res.status(404).json({ error: 'Transaction not found' });
+            }
+
+            let splits = transaction.splits;
+            if (typeof splits === 'string') {
+                try { splits = JSON.parse(splits); } catch (e) { splits = null; }
+            }
+
+            if (!Array.isArray(splits) || !splits[splitIndex]) {
+                const msg = `Split index ${splitIndex} invalid for transaction ${originalId}. Splits length: ${Array.isArray(splits) ? splits.length : 'N/A'}`;
+                console.error(msg);
+                return res.status(400).json({ error: 'Split not found in transaction' });
+            }
+
+            // Remove the split
+            // Remove the split
+            const removedSplit = splits.splice(splitIndex, 1)[0];
+
+
+            // Re-calculate amount (reduce absolute value of total)
+            const sign = transaction.amount < 0 ? -1 : 1;
+            const reducedAmount = Math.abs(transaction.amount) - Math.abs(parseFloat(removedSplit.amount || 0));
+
+            // If no splits left or amount is zero, delete the whole transaction
+            if (splits.length === 0 || reducedAmount <= 0.01) {
+                await db.deleteManualTransaction(originalId);
+
+            } else {
+                // Update parent with new amount and remaining splits
+                const newAmount = reducedAmount * sign;
+                const updatedData = {
+                    ...transaction,
+                    amount: newAmount,
+                    splits: splits
+                    // Keep other fields (date, merchant, etc) same
+                };
+
+                // We need to use updateManualTransaction, but it expects specific fields
+                // Simpler to just call update with the constructed object
+                await db.updateManualTransaction(originalId, updatedData);
+            }
+
+
+            return res.json({ status: 'success' });
+        }
+
+        // Standard Deletion
         await db.deleteManualTransaction(id);
-        console.log(`Successfully deleted transaction: ${id}`);
         res.json({ status: 'success' });
+
     } catch (error) {
         console.error('Failed to delete transaction:', error);
         res.status(500).json({ error: 'Failed to delete transaction' });

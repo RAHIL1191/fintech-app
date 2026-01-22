@@ -227,11 +227,11 @@ const TransactionFilterModal = ({
                         />
                     </View>
 
-                    {/* Notes */}
-                    <Text style={styles.sectionTitle}>Notes</Text>
+                    {/* Search (Merchant, Title, Notes) */}
+                    <Text style={styles.sectionTitle}>Search</Text>
                     <TextInput
                         style={styles.noteInput}
-                        placeholder="Something like 'grocery'..."
+                        placeholder="Search merchant, title, or note..."
                         value={note}
                         onChangeText={setNote}
                         placeholderTextColor="#94A3B8"

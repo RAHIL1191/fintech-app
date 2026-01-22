@@ -31,13 +31,13 @@ const Insights = () => {
     const [transactionFilterModalVisible, setTransactionFilterModalVisible] = useState(false);
     const [transactionFilters, setTransactionFilters] = useState({});
     const [groupBy, setGroupBy] = useState('Monthly'); // 'Monthly', 'Weekly', 'Bi-Weekly', 'Yearly', 'Custom'
-    const [startDay, setStartDay] = useState('28'); // Default start day
+    const [startDay, setStartDay] = useState('1'); // Default start day (1st of month)
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showDayOfWeekPicker, setShowDayOfWeekPicker] = useState(false);
     const [showMonthPicker, setShowMonthPicker] = useState(false);
-    const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 28));
-    const [customStartDate, setCustomStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 28));
-    const [customEndDate, setCustomEndDate] = useState(new Date(new Date().getFullYear() + 1, new Date().getMonth(), 27));
+    const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+    const [customStartDate, setCustomStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+    const [customEndDate, setCustomEndDate] = useState(new Date(new Date().getFullYear() + 1, new Date().getMonth(), 0));
     const [datePickerTarget, setDatePickerTarget] = useState('single'); // 'single', 'customStart', 'customEnd'
     const [transactionsFilter, setTransactionsFilter] = useState('All'); // 'All', 'Expenses', 'Income', 'Transfer'
     const [spendingFilter, setSpendingFilter] = useState('Category'); // 'Category', 'Merchant', 'Income'
@@ -922,12 +922,10 @@ const Insights = () => {
         return getCategoryColor(category, mergedTaxonomy);
     };
 
-    const renderTransactionsTab = () => {
-        // Use useMemo to avoid re-filtering on every render if possible, 
-        // but since we are inside a function, we'll execute it directly.
-        // Assuming the filter operation itself is fast enough (<50ms for <5k items).
-        // The main bottleneck was rendering the ScrollView.
+    // --- Top Level Hooks for Transactions Tab ---
 
+    // Memoize the filtering logic itself (or at least the result)
+    const transactionSections = React.useMemo(() => {
         const filtered = transactions.filter(t => {
             // 1. Type Filter
             let matchesType = true;
@@ -973,7 +971,7 @@ const Insights = () => {
             if (transactionFilters.note) {
                 const search = transactionFilters.note.toLowerCase();
                 matchesNote = (t.merchant_name || t.name).toLowerCase().includes(search) ||
-                    (t.category && t.category.toLowerCase().includes(search));
+                    (Array.isArray(t.category) ? t.category.some(c => c.toLowerCase().includes(search)) : (t.category && t.category.toLowerCase().includes(search)));
             }
 
             return matchesType && matchesCategory && matchesAccount && matchesDate && matchesAmount && matchesNote;
@@ -990,60 +988,31 @@ const Insights = () => {
             return acc;
         }, {});
 
-        const sections = Object.values(sectionsMap).sort((a, b) => new Date(b.title) - new Date(a.title));
+        return Object.values(sectionsMap).sort((a, b) => new Date(b.title) - new Date(a.title));
+    }, [transactions, transactionsFilter, transactionFilters]);
 
-        const renderItem = ({ item: t }) => (
-            <TouchableOpacity
-                style={styles.card}
-                onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
-            >
-                <View style={styles.cardLeft}>
-                    <View style={[styles.cardIcon, { backgroundColor: getIconColor(t.personal_finance_category?.primary) }]}>
-                        {getIconForCategory(t.personal_finance_category?.primary)}
-                    </View>
-                    <View style={styles.cardInfo}>
-                        <Text style={styles.cardTitle}>{getTransactionDisplayName(t)}</Text>
-                        <Text style={styles.cardSubtitle}>
-                            {new Date(t.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{t.updated_at ? `, ${new Date(t.updated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''} • {formatCategory(t.personal_finance_category?.primary || t.category?.[0])}
-                        </Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
-                            {getAccountIcon(t.account_type)}
-                            <Text style={{ color: '#94A3B8', fontSize: 12 }}>
-                                {[
-                                    t.account_owner_name,
-                                    t.institution_name?.split(' ')[0],
-                                    t.account_subtype === 'credit card' ? 'CC' :
-                                        t.account_subtype === 'checking' ? 'Chequing' :
-                                            t.account_subtype === 'savings' ? 'Savings' :
-                                                t.account_subtype === 'mortgage' ? 'Mortgage' :
-                                                    t.account_subtype || t.account_type || 'Cash'
-                                ].filter(Boolean).join(' · ')}
-                            </Text>
-                        </View>
-                    </View>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={[styles.cardAmount, { color: t.amount < 0 ? '#10B981' : '#EF4444' }]}>
-                        {t.amount < 0 ? '+' : ''}${Math.abs(t.amount).toFixed(2)}
-                    </Text>
-                    {new Date(t.date) > new Date() && (
-                        <View style={{ backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4 }}>
-                            <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>Future</Text>
-                        </View>
-                    )}
-                </View>
-            </TouchableOpacity>
-        );
+    const renderTransactionItem = React.useCallback(({ item: t }) => (
+        <TransactionCard
+            t={t}
+            getIconColor={getIconColor}
+            getIconForCategory={getIconForCategory}
+            getTransactionDisplayName={getTransactionDisplayName}
+            formatCategory={formatCategory}
+            getAccountIcon={getAccountIcon}
+            navigation={navigation}
+        />
+    ), [navigation, getIconColor, getIconForCategory, getTransactionDisplayName, formatCategory, getAccountIcon]);
 
-        const renderSectionHeader = ({ section: { title, total } }) => (
-            <View style={styles.dateHeader}>
-                <Text style={styles.dateTitle}>{formatDateHeader(title)}</Text>
-                <Text style={[styles.dateTotal, { color: total < 0 ? '#10B981' : '#FFF' }]}>
-                    {total < 0 ? '+' : ''}${Math.abs(total).toFixed(2)}
-                </Text>
-            </View>
-        );
+    const renderTransactionSectionHeader = React.useCallback(({ section: { title, total } }) => (
+        <View style={styles.dateHeader}>
+            <Text style={styles.dateTitle}>{formatDateHeader(title)}</Text>
+            <Text style={[styles.dateTotal, { color: total < 0 ? '#10B981' : '#FFF' }]}>
+                {total < 0 ? '+' : ''}${Math.abs(total).toFixed(2)}
+            </Text>
+        </View>
+    ), []);
 
+    const renderTransactionsTab = () => {
         return (
             <View style={{ flex: 1 }}>
                 <View style={styles.filterRow}>
@@ -1066,19 +1035,23 @@ const Insights = () => {
                 </TouchableOpacity>
 
                 <SectionList
-                    sections={sections}
+                    sections={transactionSections}
                     keyExtractor={(item, index) => item.transaction_id || index.toString()}
-                    renderItem={renderItem}
-                    renderSectionHeader={renderSectionHeader}
+                    renderItem={renderTransactionItem}
+                    renderSectionHeader={renderTransactionSectionHeader}
                     contentContainerStyle={styles.listContent}
                     stickySectionHeadersEnabled={false}
-                    initialNumToRender={12}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
                     windowSize={5}
+                    removeClippedSubviews={true}
                     ListFooterComponent={<View style={{ height: 100 }} />}
                 />
             </View>
         );
     };
+
+
 
     const renderSpendingTab = () => {
         const { start, end, label } = getPeriodRange(groupBy, currentDate, startDay, startDate);
@@ -2021,94 +1994,89 @@ const Insights = () => {
             </Modal >
 
             {/* Transaction List Modal */}
-            < Modal
+            <Modal
                 visible={!!expandedModalSection}
                 animationType="slide"
-                transparent={true}
+                presentationStyle="pageSheet"
                 onRequestClose={() => setExpandedModalSection(null)}
             >
-                <View style={styles.drillDownOverlay}>
-                    <View style={styles.drillDownContainer}>
-                        {/* Header */}
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#334155' }}>
-                            <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700' }}>
-                                {expandedModalSection === 'income-past' ? 'Income Until Today' :
-                                    expandedModalSection === 'income-future' ? 'Upcoming Income' :
-                                        expandedModalSection === 'income-all' ? 'Total Income' :
-                                            expandedModalSection === 'expense-past' ? 'Expenses Until Today' :
-                                                expandedModalSection === 'expense-future' ? 'Upcoming Expenses' :
-                                                    'Total Expenses'}
-                            </Text>
-                            <TouchableOpacity onPress={() => setExpandedModalSection(null)}>
-                                <Text style={{ color: '#FFF', fontSize: 24 }}>×</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
-                            {(() => {
-                                if (!detailedMonth || !expandedModalSection) return null;
-                                const { monthIndex, year, range } = detailedMonth;
-                                const today = new Date();
-                                const currentDay = today.getDate();
-                                const type = expandedModalSection.startsWith('income') ? 'income' : 'expense';
-                                const period = expandedModalSection.split('-')[1]; // past, future, all
-
-                                const list = transactions.filter(t => {
-                                    if (t.is_transfer) return false;
-                                    if (selectedAccountIds.length > 0 && !selectedAccountIds.includes(t.account_id)) return false;
-
-                                    const amt = parseFloat(t.amount);
-                                    if (isNaN(amt)) return false;
-                                    const [y, m, d] = t.date.split('-').map(Number);
-                                    const tDate = new Date(y, m - 1, d); tDate.setHours(0, 0, 0, 0);
-
-                                    // Filter by Range or Month/Year
-                                    if (range) {
-                                        if (tDate < range.start || tDate > range.end) return false;
-                                    } else {
-                                        if ((m - 1) !== monthIndex || y !== year) return false;
-                                    }
-
-                                    // Filter by Period (Until Today / Upcoming / All)
-                                    // Calculate isUntilToday based on range or month logic
-                                    // For range: isUntilToday if tDate <= today
-                                    // For month: isUntilToday if past month OR (current month && d <= currentDay)
-                                    // Simplified: tDate <= today covers both essentially?
-                                    // But strictly "Until Today" means up to NOW.
-                                    const tDateOnly = new Date(y, m - 1, d);
-                                    const todayOnly = new Date(); todayOnly.setHours(0, 0, 0, 0);
-                                    const isUntilToday = tDateOnly <= todayOnly;
-
-                                    const isTargetPeriod = period === 'all' ? true : (period === 'past' ? isUntilToday : !isUntilToday);
-                                    const isTargetType = type === 'income' ? amt < 0 : amt > 0;
-                                    return isTargetPeriod && isTargetType;
-                                }).sort((a, b) => new Date(b.date) - new Date(a.date));
-
-                                return (
-                                    <>
-                                        {list.map((t, idx) => (
-                                            <TouchableOpacity
-                                                key={idx}
-                                                onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
-                                                style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#334155' }}
-                                            >
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '500' }}>{getTransactionDisplayName(t)}</Text>
-                                                    <Text style={{ color: '#94A3B8', fontSize: 12 }}>{t.date.split('-')[2]} {months[parseInt(t.date.split('-')[1]) - 1].substring(0, 3)}</Text>
-                                                </View>
-                                                <Text style={{ color: type === 'income' ? '#10B981' : '#FFF', fontSize: 15, fontWeight: '600' }}>
-                                                    ${Math.abs(t.amount).toFixed(2)}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                        {list.length === 0 && <Text style={{ color: '#64748B', textAlign: 'center', marginTop: 20 }}>No transactions found</Text>}
-                                    </>
-                                );
-                            })()}
-                        </ScrollView>
+                <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#050B14' }]}>
+                    <View style={styles.header}>
+                        <TouchableOpacity onPress={() => setExpandedModalSection(null)} style={{ padding: 8 }}>
+                            <ChevronLeft size={24} color="#FFF" />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>
+                            {expandedModalSection === 'income-past' ? 'Income Until Today' :
+                                expandedModalSection === 'income-future' ? 'Upcoming Income' :
+                                    expandedModalSection === 'income-all' ? 'Total Income' :
+                                        expandedModalSection === 'expense-past' ? 'Expenses Until Today' :
+                                            expandedModalSection === 'expense-future' ? 'Upcoming Expenses' :
+                                                'Total Expenses'}
+                        </Text>
+                        <View style={{ width: 40 }} />
                     </View>
-                </View>
-            </Modal >
+
+                    {(() => {
+                        if (!detailedMonth || !expandedModalSection) return null;
+                        const { monthIndex, year, range } = detailedMonth;
+                        const today = new Date();
+                        const currentDay = today.getDate();
+                        const type = expandedModalSection.startsWith('income') ? 'income' : 'expense';
+                        const period = expandedModalSection.split('-')[1]; // past, future, all
+
+                        const list = transactions.filter(t => {
+                            if (t.is_transfer) return false;
+                            if (selectedAccountIds.length > 0 && !selectedAccountIds.includes(t.account_id)) return false;
+
+                            const amt = parseFloat(t.amount);
+                            if (isNaN(amt)) return false;
+                            const [y, m, d] = t.date.split('-').map(Number);
+                            const tDate = new Date(y, m - 1, d); tDate.setHours(0, 0, 0, 0);
+
+                            // Filter by Range or Month/Year
+                            if (range) {
+                                if (tDate < range.start || tDate > range.end) return false;
+                            } else {
+                                if ((m - 1) !== monthIndex || y !== year) return false;
+                            }
+
+                            // Period Filter
+                            const tDateOnly = new Date(y, m - 1, d);
+                            const todayOnly = new Date(); todayOnly.setHours(0, 0, 0, 0);
+                            const isUntilToday = tDateOnly <= todayOnly;
+
+                            const isTargetPeriod = period === 'all' ? true : (period === 'past' ? isUntilToday : !isUntilToday);
+                            const isTargetType = type === 'income' ? amt < 0 : amt > 0;
+                            return isTargetPeriod && isTargetType;
+                        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                        const renderTxItem = ({ item: t }) => (
+                            <TouchableOpacity
+                                onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
+                                style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#334155' }}
+                            >
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '500' }}>{getTransactionDisplayName(t)}</Text>
+                                    <Text style={{ color: '#94A3B8', fontSize: 12 }}>{t.date.split('-')[2]} {months[parseInt(t.date.split('-')[1]) - 1].substring(0, 3)}</Text>
+                                </View>
+                                <Text style={{ color: type === 'income' ? '#10B981' : '#FFF', fontSize: 15, fontWeight: '600' }}>
+                                    ${Math.abs(t.amount).toFixed(2)}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+
+                        return (
+                            <FlatList
+                                data={list}
+                                renderItem={renderTxItem}
+                                keyExtractor={(item, index) => item.transaction_id || index.toString()}
+                                contentContainerStyle={{ padding: 16, paddingBottom: 200 }}
+                                ListEmptyComponent={<Text style={{ color: '#64748B', textAlign: 'center', marginTop: 20 }}>No transactions found</Text>}
+                            />
+                        );
+                    })()}
+                </SafeAreaView>
+            </Modal>
 
             {/* Filter Modal */}
             < Modal
@@ -3165,6 +3133,50 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 });
+
+// Memoized Card Component to prevent re-renders
+const TransactionCard = React.memo(({ t, getIconColor, getIconForCategory, getTransactionDisplayName, formatCategory, getAccountIcon, navigation }) => (
+    <TouchableOpacity
+        style={styles.card}
+        onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
+    >
+        <View style={styles.cardLeft}>
+            <View style={[styles.cardIcon, { backgroundColor: getIconColor(t.personal_finance_category?.primary) }]}>
+                {getIconForCategory(t.personal_finance_category?.primary)}
+            </View>
+            <View style={styles.cardInfo}>
+                <Text style={styles.cardTitle}>{getTransactionDisplayName(t)}</Text>
+                <Text style={styles.cardSubtitle}>
+                    {new Date(t.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{t.updated_at ? `, ${new Date(t.updated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''} • {formatCategory(t.personal_finance_category?.primary || t.category?.[0])}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+                    {getAccountIcon(t.account_type)}
+                    <Text style={{ color: '#94A3B8', fontSize: 12 }}>
+                        {[
+                            t.account_owner_name,
+                            t.institution_name?.split(' ')[0],
+                            t.account_subtype === 'credit card' ? 'CC' :
+                                t.account_subtype === 'checking' ? 'Chequing' :
+                                    t.account_subtype === 'savings' ? 'Savings' :
+                                        t.account_subtype === 'mortgage' ? 'Mortgage' :
+                                            t.account_subtype || t.account_type || 'Cash'
+                        ].filter(Boolean).join(' · ')}
+                    </Text>
+                </View>
+            </View>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+            <Text style={[styles.cardAmount, { color: t.amount < 0 ? '#10B981' : '#EF4444' }]}>
+                {t.amount < 0 ? '+' : ''}${Math.abs(t.amount).toFixed(2)}
+            </Text>
+            {new Date(t.date) > new Date() && (
+                <View style={{ backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4 }}>
+                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>Future</Text>
+                </View>
+            )}
+        </View>
+    </TouchableOpacity>
+));
 
 export default Insights;
 // Force Rebuild

@@ -63,8 +63,10 @@ const MainTabs = () => {
         };
 
         checkStatus();
-        const interval = setInterval(checkStatus, 10000); // Check every 10s
-        return () => clearInterval(interval);
+        checkStatus();
+        // Removed polling to prevent excessive API calls
+        // const interval = setInterval(checkStatus, 60000); 
+        // return () => clearInterval(interval);
     }, []);
 
     return (

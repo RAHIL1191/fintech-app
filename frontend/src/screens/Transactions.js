@@ -56,7 +56,14 @@ const Transactions = ({ navigation, route }) => {
         fetchData();
     }, []);
 
-    // Listen for explicit refresh requests (e.g. after adding a transaction)
+    // Refresh data whenever the screen comes into focus
+    useEffect(() => {
+        if (isFocused) {
+            fetchData(true);
+        }
+    }, [isFocused]);
+
+    // Listen for explicit refresh requests (legacy support, though isFocused covers most cases)
     useEffect(() => {
         if (route.params?.refresh) {
             fetchData(true);
@@ -70,23 +77,23 @@ const Transactions = ({ navigation, route }) => {
     }, [transactions, activeFilters]);
 
     const fetchData = async (forceSync = false) => {
-        console.log('fetchData called. forceSync:', forceSync);
         const params = {};
+
         if (forceSync || (typeof forceSync === 'object' && forceSync.nativeEvent)) {
             params.sync = 'true';
         }
 
-        if (transactions.length === 0 || params.sync) {
-            console.log('Setting loading = true');
+        // Only show full loading state if we have no data
+        if (transactions.length === 0) {
             setLoading(true);
         }
+
         try {
-            console.log('API Request starting with params:', params);
             const [txRes, accRes] = await Promise.all([
                 api.get('/transactions', { params }),
                 api.get('/accounts')
             ]);
-            console.log('API Request success. Tx count:', txRes.data.transactions?.length);
+
 
             setTransactions(txRes.data.transactions || []);
             setAccounts(accRes.data.accounts || []);
@@ -94,9 +101,9 @@ const Transactions = ({ navigation, route }) => {
             console.log('Fetching data error:', error.message);
             Alert.alert('Refresh Error', 'Failed to fetch the latest data.');
         } finally {
-            console.log('Setting loading = false');
             setLoading(false);
         }
+
     };
 
     const applyFilters = () => {

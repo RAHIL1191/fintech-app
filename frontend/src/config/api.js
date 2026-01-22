@@ -8,9 +8,10 @@ const PRODUCTION_URL = 'https://fintech-backend-psg5.onrender.com';
 const LOCAL_URL = 'http://10.0.2.2:8000';
 
 // 3. Select automatically (or hardcode to PRODUCTION_URL for testing)
-const baseURL = (__DEV__ && !PRODUCTION_URL.includes('YOUR_BACKEND_URL'))
-    ? LOCAL_URL
-    : PRODUCTION_URL;
+// 3. Select automatically
+// Currently forcing PRODUCTION_URL to allow "Wireless" usage on iPhone/Android without local terminal
+// const baseURL = PRODUCTION_URL;
+const baseURL = (__DEV__ && !PRODUCTION_URL.includes('YOUR_BACKEND_URL')) ? LOCAL_URL : PRODUCTION_URL;
 
 const api = axios.create({
     baseURL: `${baseURL}/api`,

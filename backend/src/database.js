@@ -639,6 +639,36 @@ class DatabaseManager {
         return { deleted: true };
     }
 
+    async getCachedTransactionIds(itemId, startDate, endDate) {
+        if (!this.pool && !this.db) await this.init();
+        const sql = this.isPostgres
+            ? 'SELECT transaction_id FROM cached_transactions WHERE item_id = $1 AND date >= $2 AND date <= $3'
+            : 'SELECT transaction_id FROM cached_transactions WHERE item_id = ? AND date >= ? AND date <= ?';
+        const rows = await this.all(sql, [itemId, startDate, endDate]);
+        return new Set(rows.map(r => r.transaction_id));
+    }
+
+    async deleteCachedTransactions(transactionIds) {
+        if (!transactionIds || transactionIds.length === 0) return;
+        if (!this.pool && !this.db) await this.init();
+
+        const placeholders = transactionIds.map(() => (this.isPostgres ? '$1' : '?')).join(',');
+        // Note: For Postgres with array, we'd need dynamic $1, $2... construction or ANY/IN logic.
+        // Simplest portable way is loop or constructed IN clause.
+
+        // Better construction for mapped placeholders:
+        if (this.isPostgres) {
+            const params = transactionIds;
+            const placeholders = params.map((_, i) => `$${i + 1}`).join(',');
+            await this.run(`DELETE FROM cached_transactions WHERE transaction_id IN (${placeholders})`, params);
+        } else {
+            const placeholders = transactionIds.map(() => '?').join(',');
+            await this.run(`DELETE FROM cached_transactions WHERE transaction_id IN (${placeholders})`, transactionIds);
+        }
+
+        console.log(`Pruned ${transactionIds.length} stale transactions.`);
+    }
+
     async upsertPlaidItem(itemId, accessToken, institutionName) {
         let sql;
         if (this.isPostgres) {

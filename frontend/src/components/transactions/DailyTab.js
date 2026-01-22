@@ -50,8 +50,13 @@ const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
     };
 
     const getIconForCategory = (category) => {
-        // Simple mapping
-        const cat = (category || '').toLowerCase();
+        // Simple mapping - handle array or string
+        let catStr = '';
+        if (Array.isArray(category) && category.length > 0) catStr = category[0];
+        else if (typeof category === 'string') catStr = category;
+
+        const cat = catStr.toLowerCase();
+
         if (cat.includes('shop')) return <ShoppingBag size={20} color="#FFF" />;
         if (cat.includes('food') || cat.includes('restaurant')) return <Coffee size={20} color="#FFF" />;
         if (cat.includes('home') || cat.includes('rent')) return <Home size={20} color="#FFF" />;
@@ -75,7 +80,12 @@ const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
     };
 
     const getIconColor = (category) => {
-        const cat = (category || '').toLowerCase();
+        let catStr = '';
+        if (Array.isArray(category) && category.length > 0) catStr = category[0];
+        else if (typeof category === 'string') catStr = category;
+
+        const cat = catStr.toLowerCase();
+
         if (cat.includes('shop')) return '#F59E0B'; // Amber
         if (cat.includes('food')) return '#EF4444'; // Red
         if (cat.includes('home')) return '#10B981'; // Emerald
