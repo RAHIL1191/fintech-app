@@ -931,8 +931,8 @@ const Insights = () => {
         const filtered = transactions.filter(t => {
             // 1. Type Filter
             let matchesType = true;
-            if (transactionsFilter === 'Expenses') matchesType = t.amount > 0;
-            else if (transactionsFilter === 'Income') matchesType = t.amount < 0;
+            if (transactionsFilter === 'Expenses') matchesType = t.amount > 0 && !t.is_transfer;
+            else if (transactionsFilter === 'Income') matchesType = t.amount < 0 && !t.is_transfer;
             else if (transactionsFilter === 'Transfer') matchesType = !!t.is_transfer;
 
             // 2. Category Filter

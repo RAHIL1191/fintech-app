@@ -8,9 +8,9 @@ import BudgetTransactionsModal from '../components/BudgetTransactionsModal';
 import BudgetCategoriesModal from '../components/BudgetCategoriesModal';
 
 const BudgetDetails = ({ navigation, route }) => {
-    const { budget: initialBudget } = route.params || {};
+    const { budget: initialBudget, initialDate } = route.params || {};
     const [budget, setBudget] = useState(initialBudget);
-    const [currentDate, setCurrentDate] = useState(new Date());
+    const [currentDate, setCurrentDate] = useState(initialDate ? new Date(initialDate) : new Date());
     const [loading, setLoading] = useState(false);
 
     // State for modals
@@ -26,13 +26,29 @@ const BudgetDetails = ({ navigation, route }) => {
     }, [currentDate]);
 
     const fetchBudgetDetails = async () => {
-        if (!initialBudget?.id) return;
+        // Use name as anchor to handle split budgets (different IDs for different months)
+        const targetName = budget?.name || initialBudget?.name;
+        if (!targetName) return;
+
         try {
             setLoading(true);
             const month = currentDate.getMonth() + 1;
             const year = currentDate.getFullYear();
-            const response = await api.get(`/budgets/${initialBudget.id}?month=${month}&year=${year}`);
-            setBudget(response.data);
+
+            // 1. Fetch Summary for target month to find the active budget ID for that month
+            const summaryRes = await api.get(`/budgets/summary?month=${month}&year=${year}`);
+            const activeBudgets = summaryRes.data || [];
+
+            // Find budget matching the name
+            const match = activeBudgets.find(b => b.name === targetName);
+
+            // 2. Determine ID to fetch: valid active ID or fallback to current ID
+            const idToFetch = match ? match.id : (budget?.id || initialBudget?.id);
+
+            if (idToFetch) {
+                const response = await api.get(`/budgets/${idToFetch}?month=${month}&year=${year}`);
+                setBudget(response.data);
+            }
         } catch (error) {
             console.error('Failed to fetch budget details:', error);
         } finally {
@@ -88,14 +104,22 @@ const BudgetDetails = ({ navigation, route }) => {
 
     const handleEditThisOnly = () => {
         setShowEditModal(false);
-        // Navigate to edit screen for this occurrence only
-        navigation.navigate('CreateBudget', { budget, editMode: 'this_only' });
+        // Navigate to edit screen for this occurrence only using PUSH to force fresh state
+        navigation.push('CreateBudget', {
+            budget,
+            editMode: 'this_only',
+            focusDate: currentDate.toISOString()
+        });
     };
 
     const handleEditAllFuture = () => {
         setShowEditModal(false);
         // Navigate to edit screen for all future occurrences
-        navigation.navigate('CreateBudget', { budget, editMode: 'all_future' });
+        navigation.push('CreateBudget', {
+            budget,
+            editMode: 'all_future',
+            focusDate: currentDate.toISOString()
+        });
     };
 
     const getNextMonth = () => {
@@ -154,6 +178,16 @@ const BudgetDetails = ({ navigation, route }) => {
         );
     };
 
+    const handleEditPress = () => {
+        // If budget is already One Time (e.g. an exception), editing it should not trigger split logic again.
+        // Just do standard edit.
+        if (budget.recurrence_frequency === 'One Time') {
+            navigation.push('CreateBudget', { budget });
+        } else {
+            setShowEditModal(true);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header */}
@@ -163,7 +197,7 @@ const BudgetDetails = ({ navigation, route }) => {
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Budget</Text>
                 <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.headerBtn} onPress={() => setShowEditModal(true)}>
+                    <TouchableOpacity style={styles.headerBtn} onPress={handleEditPress}>
                         <Pencil size={20} color="#3B82F6" />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.headerBtn} onPress={() => setShowOptionsModal(true)}>

@@ -1,12 +1,14 @@
 import 'react-native-gesture-handler';
 console.log("!!! APP LAUNCHED !!!");
 import React from 'react';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LayoutDashboard, Receipt, BarChart3, Building2, PieChart } from 'lucide-react-native';
+import api from './src/config/api';
 
 // Screens - Restoring all
 import Dashboard from './src/screens/Dashboard';
@@ -39,6 +41,32 @@ const AccountsStack = () => {
 };
 
 const MainTabs = () => {
+    const [hasBudgetAlert, setHasBudgetAlert] = React.useState(false);
+
+    React.useEffect(() => {
+        const checkStatus = async () => {
+            try {
+                // Get current month/year
+                const now = new Date();
+                const month = now.getMonth() + 1;
+                const year = now.getFullYear();
+
+                const response = await api.get(`/budgets/summary?month=${month}&year=${year}`);
+                const budgets = response.data || [];
+
+                // Check if any budget is strictly over limit
+                const hasOverspending = budgets.some(b => b.spent > (b.limit || b.amount || 0));
+                setHasBudgetAlert(hasOverspending);
+            } catch (e) {
+                // silently fail
+            }
+        };
+
+        checkStatus();
+        const interval = setInterval(checkStatus, 10000); // Check every 10s
+        return () => clearInterval(interval);
+    }, []);
+
     return (
         <Tab.Navigator
             screenOptions={{
@@ -77,7 +105,24 @@ const MainTabs = () => {
                 name="Budget"
                 component={Budget}
                 options={{
-                    tabBarIcon: ({ color, size }) => <BarChart3 size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => (
+                        <View>
+                            <BarChart3 size={size} color={color} />
+                            {hasBudgetAlert && (
+                                <View style={{
+                                    position: 'absolute',
+                                    right: -2,
+                                    top: -2,
+                                    backgroundColor: '#EF4444',
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: 4,
+                                    borderWidth: 1,
+                                    borderColor: '#FFF'
+                                }} />
+                            )}
+                        </View>
+                    ),
                 }}
             />
             <Tab.Screen

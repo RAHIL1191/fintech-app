@@ -7,12 +7,13 @@ import {
     ArrowRight, Bell, ChevronRight, Calculator, Check, X
 } from 'lucide-react-native';
 import api from '../config/api';
+import { CATEGORY_TAXONOMY } from '../constants/CategoryTaxonomy';
 
 const { width } = Dimensions.get('window');
 
 const CreateBudget = ({ navigation, route }) => {
     // Edit mode params
-    const { budget: existingBudget, editMode } = route.params || {};
+    const { budget: existingBudget, editMode, focusDate } = route.params || {};
     const isEditMode = !!existingBudget;
     const [step, setStep] = useState(isEditMode ? 3 : 1); // Skip to form if editing
     const [budgetType, setBudgetType] = useState(existingBudget?.type || null);
@@ -22,7 +23,13 @@ const CreateBudget = ({ navigation, route }) => {
     const [budgetName, setBudgetName] = useState(existingBudget?.name || '');
     const [budgetAmount, setBudgetAmount] = useState(existingBudget?.amount?.toString() || '');
     const [recurrence, setRecurrence] = useState(existingBudget?.recurrence_frequency || 'Monthly');
-    const [startDate, setStartDate] = useState(existingBudget?.start_date || new Date().toISOString().split('T')[0]);
+
+    // If we are editing specific instance, default start date to that instance's month
+    const defaultStartDate = (isEditMode && focusDate)
+        ? new Date(focusDate).toISOString().split('T')[0]
+        : (existingBudget?.start_date || new Date().toISOString().split('T')[0]);
+
+    const [startDate, setStartDate] = useState(defaultStartDate);
     const [selectedCategories, setSelectedCategories] = useState(existingBudget?.categories || []);
     const [selectedAccounts, setSelectedAccounts] = useState(existingBudget?.accounts || []);
     const [isRollover, setIsRollover] = useState(existingBudget?.is_rollover || false);
@@ -49,7 +56,31 @@ const CreateBudget = ({ navigation, route }) => {
                 api.get('/categories'),
                 api.get('/accounts')
             ]);
-            setAvailableCategories(catRes.data);
+
+            // Merge Custom Categories with Taxonomy
+            const customCats = Array.isArray(catRes.data) ? catRes.data : (catRes.data.categories || []);
+            const allCategories = [];
+
+            // 1. Add All Taxonomy Categories (Parents + Subs)
+            Object.entries(CATEGORY_TAXONOMY).forEach(([parent, data]) => {
+                allCategories.push({ name: parent, isParent: true, color: data.color, icon: data.icon });
+                data.subcategories.forEach(sub => {
+                    allCategories.push({ name: sub, isParent: false, parent: parent });
+                });
+            });
+
+            // 2. Add Custom Categories (if not already present)
+            customCats.forEach(c => {
+                const exists = allCategories.some(existing => existing.name.toLowerCase() === c.name.toLowerCase());
+                if (!exists) {
+                    allCategories.push({ name: c.name, isParent: false, parent: 'Custom' });
+                }
+            });
+
+            // unique check just in case
+            const uniqueCategories = [...new Map(allCategories.map(item => [item.name, item])).values()];
+
+            setAvailableCategories(uniqueCategories);
             setAvailableAccounts(accRes.data);
         } catch (err) {
             console.error(err);
@@ -73,8 +104,13 @@ const CreateBudget = ({ navigation, route }) => {
                 categories: selectedCategories,
                 accounts: selectedAccounts,
                 is_rollover: isRollover,
-                alert_percent: alertPercent
+                alert_percent: alertPercent,
+                // Extra params for advanced editing
+                editMode: editMode,
+                focusDate: focusDate
             };
+
+
 
             if (isEditMode && existingBudget?.id) {
                 // Update existing budget
@@ -345,7 +381,7 @@ const CreateBudget = ({ navigation, route }) => {
                 {availableCategories.length > 0 ? (
                     <FlatList
                         data={availableCategories}
-                        keyExtractor={item => item.id.toString()}
+                        keyExtractor={item => item.name}
                         contentContainerStyle={{ paddingBottom: 80 }}
                         renderItem={({ item }) => {
                             const isSelected = selectedCategories.includes(item.name);
@@ -354,7 +390,18 @@ const CreateBudget = ({ navigation, route }) => {
                                     if (isSelected) setSelectedCategories(prev => prev.filter(c => c !== item.name));
                                     else setSelectedCategories(prev => [...prev, item.name]);
                                 }}>
-                                    <Text style={styles.listItemText}>{item.name}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        {/* Visual indication for Parent/Sub */}
+                                        {item.isParent ? (
+                                            <View style={[styles.iconRoundContainer, { width: 32, height: 32, marginRight: 12, backgroundColor: (item.color || '#64748B') + '20' }]}>
+                                                {/* Simple dot or icon if we want to import DynamicIcon, keeping simple for now */}
+                                                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: item.color || '#64748B' }} />
+                                            </View>
+                                        ) : (
+                                            <View style={{ width: 32, marginRight: 12 }} /> // Indent
+                                        )}
+                                        <Text style={[styles.listItemText, item.isParent && { fontWeight: '700' }]}>{item.name}</Text>
+                                    </View>
                                     {isSelected && <Check size={20} color="#3B82F6" />}
                                 </TouchableOpacity>
                             );

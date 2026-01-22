@@ -11,7 +11,7 @@ const { width } = Dimensions.get('window');
 const Budget = ({ navigation }) => {
     const [activeTab, setActiveTab] = useState('BUDGETS'); // BUDGETS | GOALS
     const [typeFilter, setTypeFilter] = useState('Expenses'); // Expenses | Income
-    const [selectedMonth, setSelectedMonth] = useState(new Date().toLocaleString('en-US', { month: 'short' }));
+    const [currentDate, setCurrentDate] = useState(new Date());
     const [budgets, setBudgets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showProgressModal, setShowProgressModal] = useState(false);
@@ -22,12 +22,31 @@ const Budget = ({ navigation }) => {
         if (isFocused) {
             fetchBudgets();
         }
-    }, [isFocused]);
+    }, [isFocused, currentDate]);
+
+    const handlePrevMonth = () => {
+        setCurrentDate(prev => {
+            const newDate = new Date(prev);
+            newDate.setMonth(prev.getMonth() - 1);
+            return newDate;
+        });
+    };
+
+    const handleNextMonth = () => {
+        setCurrentDate(prev => {
+            const newDate = new Date(prev);
+            newDate.setMonth(prev.getMonth() + 1);
+            return newDate;
+        });
+    };
 
     const fetchBudgets = async () => {
         try {
             setLoading(true);
-            const response = await api.get('/budgets/summary');
+            const month = currentDate.getMonth() + 1; // 1-12
+            const year = currentDate.getFullYear();
+
+            const response = await api.get(`/budgets/summary?month=${month}&year=${year}`);
             const fetchedBudgets = response.data || [];
             setBudgets(fetchedBudgets);
             // Auto-select all budgets by default on first load
@@ -110,9 +129,11 @@ const Budget = ({ navigation }) => {
             </View>
 
             <View style={styles.monthSelector}>
-                <TouchableOpacity><ChevronLeft size={20} color="#64748B" /></TouchableOpacity>
-                <Text style={styles.monthText}>{selectedMonth}</Text>
-                <TouchableOpacity><ChevronRight size={20} color="#64748B" /></TouchableOpacity>
+                <TouchableOpacity onPress={handlePrevMonth}><ChevronLeft size={20} color="#64748B" /></TouchableOpacity>
+                <Text style={styles.monthText}>
+                    {currentDate.toLocaleString('en-US', { month: 'short', year: 'numeric' })}
+                </Text>
+                <TouchableOpacity onPress={handleNextMonth}><ChevronRight size={20} color="#64748B" /></TouchableOpacity>
             </View>
         </View>
     );
@@ -206,7 +227,7 @@ const Budget = ({ navigation }) => {
 
                                         <View style={styles.budgetFooter}>
                                             <Text style={styles.percentText}>{percent.toFixed(1)}%</Text>
-                                            <Text style={styles.periodText}>{budget.period || selectedMonth}</Text>
+                                            <Text style={styles.periodText}>{budget.period || currentDate.toLocaleString('en-US', { month: 'short' })}</Text>
                                         </View>
                                     </View>
                                 );
@@ -229,7 +250,10 @@ const Budget = ({ navigation }) => {
             <TouchableOpacity
                 key={item.id}
                 style={styles.budgetItem}
-                onPress={() => navigation.navigate('BudgetDetails', { budget: item })}
+                onPress={() => navigation.navigate('BudgetDetails', {
+                    budget: item,
+                    initialDate: currentDate.toISOString()
+                })}
                 activeOpacity={0.7}
             >
                 <View style={styles.budgetHeader}>

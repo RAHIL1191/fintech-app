@@ -1,8 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, SectionList, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, ShoppingBag, Coffee, Home, CreditCard, DollarSign, ArrowRightLeft } from 'lucide-react-native';
 
 const BudgetTransactionsModal = ({ visible, onClose, transactions = [], budgetName }) => {
+    const insets = useSafeAreaInsets();
 
     // --- Helpers reused from DailyTab ---
     const getIconForCategory = (category) => {
@@ -73,14 +75,20 @@ const BudgetTransactionsModal = ({ visible, onClose, transactions = [], budgetNa
             presentationStyle="pageSheet"
             onRequestClose={onClose}
         >
-            <View style={styles.container}>
+            <View style={[styles.container, { paddingTop: insets.top }]}>
                 {/* Header */}
                 <View style={styles.header}>
                     <View>
                         <Text style={styles.headerTitle}>Expenses</Text>
                         <Text style={styles.headerSubtitle}>{budgetName}</Text>
                     </View>
-                    <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                    <TouchableOpacity onPress={() => {
+                        console.log('Close button pressed');
+                        if (onClose) onClose();
+                    }}
+                        style={styles.closeBtn}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
                         <X size={24} color="#0F172A" />
                     </TouchableOpacity>
                 </View>

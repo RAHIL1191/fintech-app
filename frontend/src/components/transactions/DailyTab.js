@@ -18,8 +18,8 @@ const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
         // 1. Filter by Type
         const filtered = transactions.filter(t => {
             if (filter === 'All') return true;
-            if (filter === 'Expenses') return t.amount > 0; // Plaid: positive amount = expense
-            if (filter === 'Income') return t.amount < 0;   // Plaid: negative amount = refund/income
+            if (filter === 'Expenses') return t.amount > 0 && !t.is_transfer; // Plaid: positive amount = expense (exclude transfers)
+            if (filter === 'Income') return t.amount < 0 && !t.is_transfer;   // Plaid: negative amount = refund/income (exclude transfers)
             if (filter === 'Transfers') {
                 return !!t.is_transfer;
             }

@@ -350,7 +350,7 @@ app.get('/api/transactions', async (req, res) => {
                 recurring_frequency: txOverride.recurring_frequency || t.recurring_frequency,
                 is_transfer: txOverride.is_transfer !== undefined
                     ? !!txOverride.is_transfer
-                    : (merchantOverride.is_transfer === 1 ? true : (t.is_transfer || false)),
+                    : (merchantOverride.is_transfer === 1 ? true : (t.is_transfer || (finalCategory && (finalCategory.toLowerCase().includes('transfer') || finalCategory.toLowerCase() === 'credit card payment')))),
                 created_at: txOverride.created_at || t.updated_at || new Date().toISOString(),
                 updated_at: txOverride.updated_at || t.updated_at || new Date().toISOString(),
                 device_info: txOverride.device_info || 'Plaid Sync',
