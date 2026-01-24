@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Platf
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Menu, Plus, AlignJustify, ChevronLeft, ChevronRight, X, AlertCircle, Check } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import api from '../config/api';
 
 const { width } = Dimensions.get('window');
@@ -18,11 +18,11 @@ const Budget = ({ navigation }) => {
     const [selectedBudgetIds, setSelectedBudgetIds] = useState(new Set());
     const isFocused = useIsFocused();
 
-    useEffect(() => {
-        if (isFocused) {
+    useFocusEffect(
+        React.useCallback(() => {
             fetchBudgets();
-        }
-    }, [isFocused, currentDate]);
+        }, [currentDate])
+    );
 
     const handlePrevMonth = () => {
         setCurrentDate(prev => {
@@ -46,8 +46,31 @@ const Budget = ({ navigation }) => {
             const month = currentDate.getMonth() + 1; // 1-12
             const year = currentDate.getFullYear();
 
-            const response = await api.get(`/budgets/summary?month=${month}&year=${year}`);
-            const fetchedBudgets = response.data || [];
+            const response = await api.get(`/budgets/summary?month=${month}&year=${year}&t=${new Date().getTime()}`);
+
+            let fetchedBudgets = response.data || [];
+
+            // Robust Frontend Deduplication: Prefer 'One Time' (Exception) over 'Monthly' (Recurring)
+            const budgetMap = new Map();
+            fetchedBudgets.forEach(b => {
+                if (!budgetMap.has(b.name)) {
+                    budgetMap.set(b.name, b);
+                } else {
+                    const existing = budgetMap.get(b.name);
+                    const currentIsException = b.recurrence_frequency === 'One Time';
+                    const existingIsException = existing.recurrence_frequency === 'One Time';
+
+                    if (currentIsException && !existingIsException) {
+                        budgetMap.set(b.name, b);
+                    } else if (currentIsException && existingIsException) {
+                        // Prefer newer ID if both are exceptions (heuristic)
+                        if (b.id > existing.id) budgetMap.set(b.name, b);
+                    }
+                    // If existing is Exception and current is not, keep existing.
+                }
+            });
+            fetchedBudgets = Array.from(budgetMap.values());
+
             setBudgets(fetchedBudgets);
             // Auto-select all budgets by default on first load
             if (selectedBudgetIds.size === 0 && fetchedBudgets.length > 0) {

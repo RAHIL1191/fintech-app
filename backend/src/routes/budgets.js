@@ -48,14 +48,105 @@ const isCategoryMatch = (txCategory, budgetCategory) => {
 // GET /api/budgets
 router.get('/', async (req, res) => {
     try {
+        const queryDate = req.query.date ? new Date(req.query.date) : new Date();
+        const year = queryDate.getFullYear();
+        const month = queryDate.getMonth();
+        const startDate = new Date(year, month, 1).toISOString().split('T')[0];
+        const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+
+        // 1. Fetch Budgets
         const budgets = await manager.all('SELECT * FROM budgets WHERE is_active = 1 ORDER BY created_at DESC');
 
-        // Parse JSON fields
-        const parsedBudgets = budgets.map(b => ({
-            ...b,
-            categories: b.categories ? JSON.parse(b.categories) : [],
-            accounts: b.accounts ? JSON.parse(b.accounts) : []
-        }));
+        // 2. Fetch Transactions for the Month (Cached + Manual)
+        // We need fields to determine match: category, overrides, manual_budget_id, exclude_from_budget
+        const transactionSql = `
+            SELECT 
+                t.transaction_id, t.amount, t.date, t.personal_finance_category,
+                m.category as manual_category, m.exclude_from_budget, m.manual_budget_id,
+                'plaid' as source
+            FROM cached_transactions t
+            LEFT JOIN transaction_metadata m ON t.transaction_id = m.transaction_id
+            WHERE t.date >= ? AND t.date <= ?
+            
+            UNION ALL
+            
+            SELECT 
+                mt.transaction_id, mt.amount, mt.date, mt.category as personal_finance_category, 
+                m.category as manual_category, m.exclude_from_budget, m.manual_budget_id,
+                'manual' as source
+            FROM manual_transactions mt
+            LEFT JOIN transaction_metadata m ON mt.transaction_id = m.transaction_id
+            WHERE mt.date >= ? AND mt.date <= ?
+        `;
+
+        const transactions = await manager.all(transactionSql, [startDate, endDate, startDate, endDate]);
+
+        // 3. Process Budgets
+        const parsedBudgets = budgets.map(b => {
+            const budget = {
+                ...b,
+                categories: b.categories ? JSON.parse(b.categories) : [],
+                accounts: b.accounts ? JSON.parse(b.accounts) : []
+            };
+
+            // Calculate Spent for this budget
+            let spent = 0;
+            const bStart = budget.start_date ? new Date(budget.start_date) : null;
+            const bEnd = budget.end_date ? new Date(budget.end_date) : null;
+
+            transactions.forEach(tx => {
+                // 1. Exclude Check
+                if (tx.exclude_from_budget) return;
+
+                // 2. Manual Override Check
+                if (tx.manual_budget_id) {
+                    if (String(tx.manual_budget_id) === String(budget.id)) {
+                        spent += tx.amount;
+                    }
+                    return; // If manual budget is set (even if not this one), it explicitly targets a budget, so skip auto-match
+                }
+
+                // 3. Auto-Match Logic
+
+                // Date Overlap Check (Transaction vs Budget Active Period)
+                // Note: We already filtered transactions by the requested month.
+                // We just need to ensure the budget was active on the transaction date.
+                const txDate = new Date(tx.date);
+                if (bStart && txDate < bStart) return;
+                if (bEnd && txDate > bEnd) return;
+
+                // Category Match Check
+                let txCategory = tx.personal_finance_category;
+                // Resolve Category: Manual Override > Metadata Category > Transaction Category
+                if (tx.manual_category) {
+                    txCategory = tx.manual_category;
+                } else if (tx.source === 'plaid' && typeof txCategory === 'string') {
+                    // Parse JSON if plaid (it comes as string from DB usually)
+                    try {
+                        const parsed = JSON.parse(txCategory);
+                        txCategory = parsed.primary;
+                    } catch (e) {
+                        // fallback if simple string
+                    }
+                }
+
+                // Check against budget categories
+                let isMatch = false;
+                if (budget.categories && Array.isArray(budget.categories)) {
+                    isMatch = budget.categories.some(cat => isCategoryMatch(txCategory, cat));
+                } else {
+                    isMatch = isCategoryMatch(txCategory, budget.category);
+                }
+
+                if (isMatch) {
+                    spent += tx.amount;
+                }
+            });
+
+            budget.spent = spent;
+            budget.remaining = budget.amount - spent;
+            return budget;
+        });
 
         res.json(parsedBudgets);
     } catch (error) {
@@ -153,21 +244,38 @@ router.get('/summary', async (req, res) => {
 
         // 2. Fetch and Filter Budgets
         // Fetch all active, then filter by validity period
-        let budgets = await manager.all('SELECT * FROM budgets WHERE is_active = 1');
+        // 2. Fetch and Filter Budgets (Optimized SQL)
+        // Check Overlap: Budget Start <= Month End AND Budget End >= Month Start
+        // Handled nulls: if end_date is null, it's effectively infinite.
+        const budgetSql = `
+            SELECT * FROM budgets 
+            WHERE is_active = 1 
+            AND (start_date IS NULL OR start_date <= ?) 
+            AND (end_date IS NULL OR end_date >= ?)
+        `;
+        let budgets = await manager.all(budgetSql, [endOfMonth, startOfMonth]);
 
-        budgets = budgets.filter(b => {
-            // Include budget if its date range overlaps with the current month
-            const bStart = b.start_date;
-            const bEnd = b.end_date;
-
-            // If budget starts strictly after the end of this month, skip it
-            if (bStart && bStart > endOfMonth) return false;
-
-            // If budget ended strictly before the start of this month, skip it
-            if (bEnd && bEnd < startOfMonth) return false;
-
-            return true;
+        // Deduplicate by Name: If multiple budgets exist for same period (e.g. edge case overlaps),
+        // prefer the 'One Time' (Exception) budget over 'Monthly' (Recurring).
+        const budgetMap = new Map();
+        budgets.forEach(b => {
+            if (!budgetMap.has(b.name)) {
+                budgetMap.set(b.name, b);
+            } else {
+                const existing = budgetMap.get(b.name);
+                // If current is One Time and existing is NOT, replace existing
+                if (b.recurrence_frequency === 'One Time' && existing.recurrence_frequency !== 'One Time') {
+                    budgetMap.set(b.name, b);
+                }
+                // If both same type, maybe pick most recently created?
+                else if (b.recurrence_frequency === existing.recurrence_frequency) {
+                    if (new Date(b.created_at) > new Date(existing.created_at)) {
+                        budgetMap.set(b.name, b);
+                    }
+                }
+            }
         });
+        budgets = Array.from(budgetMap.values());
 
         // 3. Fetch Raw Transactions
         const manualTxs = await manager.all(`
@@ -219,7 +327,9 @@ router.get('/summary', async (req, res) => {
                 amount: t.amount,
                 date: t.date,
                 transaction_id: t.transaction_id,
-                pending: t.pending
+                pending: t.pending,
+                manual_budget_id: txOverride.manual_budget_id,
+                exclude_from_budget: txOverride.exclude_from_budget
             };
         });
 
@@ -259,10 +369,19 @@ router.get('/summary', async (req, res) => {
             const budgetCats = b.categories ? JSON.parse(b.categories) : [];
 
             const relevantTxs = dedupedTxs.filter(tx => {
-                // 1. Exclude Transfers
+                // 1. Exclude from Budget (Global Override)
+                if (tx.exclude_from_budget === 1) return false;
+
+                // 2. Manual Budget Assignment (Specific Override)
+                // If manually assigned to THIS budget, include it
+                if (tx.manual_budget_id && String(tx.manual_budget_id) === String(b.id)) return true;
+                // If manually assigned to ANOTHER budget, exclude it
+                if (tx.manual_budget_id && String(tx.manual_budget_id) !== String(b.id)) return false;
+
+                // 3. Exclude Transfers (Standard Rule)
                 if (tx.is_transfer) return false;
 
-                // 2. Check Category Match
+                // 4. Check Category Match
                 if (budgetCats.length > 0) {
                     const hasMatch = budgetCats.some(budgetCat => isCategoryMatch(tx.category, budgetCat));
                     if (!hasMatch) return false;
@@ -294,6 +413,7 @@ router.get('/summary', async (req, res) => {
                 categories: budgetCats,
                 spent: spent,
                 limit: b.amount,
+                remaining: b.amount - spent,
                 period: periodStr,
                 icon: 'DollarSign' // Placeholder
             };
@@ -325,16 +445,26 @@ router.get('/:id', async (req, res) => {
         const startOfMonth = new Date(targetYear, targetMonth - 1, 1).toISOString().split('T')[0];
         const endOfMonth = new Date(targetYear, targetMonth, 0).toISOString().split('T')[0];
 
-        // Fetch transactions for this store logic
+        // Determine query range based on Rollover
+        let queryStartDate = startOfMonth;
+        const isRollover = !!budget.is_rollover;
+        const budgetStartDate = budget.start_date ? new Date(budget.start_date) : new Date(budget.created_at);
+        const budgetStartDateStr = budgetStartDate.toISOString().split('T')[0];
+
+        if (isRollover && budgetStartDate < new Date(startOfMonth)) {
+            queryStartDate = budgetStartDateStr;
+        }
+
+        // Fetch transactions for the extended range
         const manualTxs = await manager.all(`
             SELECT * FROM manual_transactions 
             WHERE date >= ? AND date <= ?
-        `, [startOfMonth, endOfMonth]);
+        `, [queryStartDate, endOfMonth]);
 
         const plaidTxs = await manager.all(`
             SELECT * FROM cached_transactions 
             WHERE date >= ? AND date <= ?
-        `, [startOfMonth, endOfMonth]);
+        `, [queryStartDate, endOfMonth]);
 
         const allTxs = [...manualTxs, ...plaidTxs];
 
@@ -376,7 +506,9 @@ router.get('/:id', async (req, res) => {
                 date: t.date,
                 name: t.name,
                 merchant_name: t.merchant_name,
-                transaction_id: t.transaction_id
+                transaction_id: t.transaction_id,
+                manual_budget_id: txOverride.manual_budget_id,
+                exclude_from_budget: txOverride.exclude_from_budget
             };
         });
 
@@ -420,7 +552,14 @@ router.get('/:id', async (req, res) => {
         const budgetCats = budget.categories ? JSON.parse(budget.categories) : [];
 
         const relevantTxs = dedupedTxs.filter(tx => {
-            // Exclude transfers from budget calculations
+            // 1. Exclude from Budget (Global Override)
+            if (tx.exclude_from_budget === 1) return false;
+
+            // 2. Manual Budget Assignment (Specific Override)
+            if (tx.manual_budget_id && String(tx.manual_budget_id) === String(id)) return true;
+            if (tx.manual_budget_id && String(tx.manual_budget_id) !== String(id)) return false;
+
+            // 3. Exclude transfers from budget calculations
             if (tx.is_transfer) return false;
 
             if (budgetCats.length > 0) {
@@ -481,13 +620,19 @@ router.put('/:id', async (req, res) => {
         // Handle Split Logic (Exception / Future)
         // Guard: Do not split if the budget is already One Time (no recurrence to split)
         if (editMode && focusDate && ['this_only', 'all_future'].includes(editMode) && originalBudget.recurrence_frequency !== 'One Time') {
-            const focus = new Date(focusDate);
-            if (isNaN(focus.getTime())) return res.status(400).json({ error: 'Invalid focusDate' });
 
-            const fYear = focus.getFullYear();
-            const fMonth = focus.getMonth(); // 0-11
+            // Fix: Manual parse to avoid Timezone shift (UTC -> Local)
+            // focusDate is "YYYY-MM-DD"
+            const [fYearStr, fMonthStr] = focusDate.split('-');
+            if (!fYearStr || !fMonthStr) return res.status(400).json({ error: 'Invalid focusDate format' });
+
+            const fYear = parseInt(fYearStr);
+            const fMonth = parseInt(fMonthStr) - 1; // 0-based index for Date constructor
 
             // Dates Calculation
+            // Date(year, monthIndex, 0) gives last day of previous month.
+            // Date(year, monthIndex, 1) gives first day of month.
+            // Using components ensures we construct local midnight for the intended month.
             const prevMonthEnd = new Date(fYear, fMonth, 0).toISOString().split('T')[0];
             const thisMonthStart = new Date(fYear, fMonth, 1).toISOString().split('T')[0];
             const thisMonthEnd = new Date(fYear, fMonth + 1, 0).toISOString().split('T')[0];

@@ -103,3 +103,34 @@ export const getCategoryIcon = (category, taxonomy = CATEGORY_TAXONOMY) => {
     const parent = getParentCategory(category, taxonomy);
     return taxonomy[parent]?.icon || "tag";
 };
+
+// Helper to check if a transaction category matches a budget category
+export const isCategoryMatch = (txCategory, budgetCategory) => {
+    if (!txCategory || !budgetCategory) return false;
+    const txCat = txCategory.toLowerCase();
+    const bdCat = budgetCategory.toLowerCase();
+
+    // 1. Direct Match
+    if (txCat === bdCat) return true;
+
+    // 2. Parent Match: If budgetCategory is a Parent, check if txCategory is one of its children
+    const taxonomyKey = Object.keys(CATEGORY_TAXONOMY).find(k => k.toLowerCase() === bdCat);
+    if (taxonomyKey) {
+        const subCategories = CATEGORY_TAXONOMY[taxonomyKey].subcategories;
+        if (subCategories.some(sub => sub.toLowerCase() === txCat)) return true;
+    }
+
+    // 3. Sub-category Partial Match (Reverse of above, or handling complex Plaid strings)
+    // e.g. tx="Shopping - Clothing", budget="Shopping" -> startsWith check
+    if (txCat.startsWith(bdCat)) return true;
+
+    // 4. Budget Category is strict match for a sub-category
+    // e.g. budget="Clothing", tx="Shopping - Clothing" (Plaid sometimes formats like this)
+    // or budget="Clothing", tx="Clothing" (Checked by direct match)
+
+    // Also check if budget category is a sub, and tx matches that sub logic
+    // This is often covered by Direct Match, but let's handle Plaid "Parent - Sub" format
+    if (txCat.includes(bdCat)) return true;
+
+    return false;
+};

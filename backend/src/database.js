@@ -80,11 +80,15 @@ class DatabaseManager {
         await addColumn('transaction_metadata', 'device_info', 'TEXT');
         await addColumn('transaction_metadata', 'splits', 'TEXT'); // Store as JSON string
         await addColumn('transaction_metadata', 'created_at', 'TIMESTAMP', 'CURRENT_TIMESTAMP');
+        await addColumn('transaction_metadata', 'manual_budget_id', 'TEXT');
+        await addColumn('transaction_metadata', 'exclude_from_budget', 'INTEGER', 0);
 
         // Ensure manual_transactions also has these columns
         await addColumn('manual_transactions', 'splits', 'TEXT');
         await addColumn('manual_transactions', 'device_info', 'TEXT');
         await addColumn('manual_transactions', 'recurring_frequency', 'TEXT');
+        await addColumn('manual_transactions', 'manual_budget_id', 'TEXT');
+        await addColumn('manual_transactions', 'exclude_from_budget', 'INTEGER', 0);
 
         // Categories migration
         await addColumn('categories', 'parent_category', 'TEXT');
@@ -117,6 +121,8 @@ class DatabaseManager {
                 is_transfer ${this.isPostgres ? 'INTEGER' : 'INTEGER'} DEFAULT 0,
                 device_info TEXT,
                 splits TEXT,
+                manual_budget_id TEXT,
+                exclude_from_budget INTEGER DEFAULT 0,
                 created_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP,
                 updated_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP
             )`,
@@ -197,6 +203,8 @@ class DatabaseManager {
                 is_transfer INTEGER DEFAULT 0,
                 device_info TEXT,
                 splits TEXT,
+                manual_budget_id TEXT,
+                exclude_from_budget INTEGER DEFAULT 0,
                 created_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP,
                 updated_at ${this.isPostgres ? 'TIMESTAMPTZ' : 'TIMESTAMP'} DEFAULT CURRENT_TIMESTAMP
             )`,
@@ -437,7 +445,7 @@ class DatabaseManager {
     }
 
     async setTransactionMetadata(id, data) {
-        const { category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splits } = data;
+        const { category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splits, manual_budget_id, exclude_from_budget } = data;
 
         // Dynamic Categorization: If a category is set for a transaction, 
         // also set it as the default for this merchant name globally.
@@ -448,8 +456,8 @@ class DatabaseManager {
         let sql;
         if (this.isPostgres) {
             sql = `
-                INSERT INTO transaction_metadata(transaction_id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splits, created_at, updated_at)
-        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                INSERT INTO transaction_metadata(transaction_id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splits, manual_budget_id, exclude_from_budget, created_at, updated_at)
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 ON CONFLICT(transaction_id) DO UPDATE SET
         category = COALESCE(EXCLUDED.category, transaction_metadata.category),
             merchant_name = COALESCE(EXCLUDED.merchant_name, transaction_metadata.merchant_name),
@@ -461,12 +469,14 @@ class DatabaseManager {
             is_transfer = COALESCE(EXCLUDED.is_transfer, transaction_metadata.is_transfer),
             device_info = COALESCE(EXCLUDED.device_info, transaction_metadata.device_info),
             splits = COALESCE(EXCLUDED.splits, transaction_metadata.splits),
+            manual_budget_id = COALESCE(EXCLUDED.manual_budget_id, transaction_metadata.manual_budget_id),
+            exclude_from_budget = COALESCE(EXCLUDED.exclude_from_budget, transaction_metadata.exclude_from_budget),
             updated_at = EXCLUDED.updated_at
                 `;
         } else {
             sql = `
-                INSERT INTO transaction_metadata(transaction_id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splits, created_at, updated_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO transaction_metadata(transaction_id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splits, manual_budget_id, exclude_from_budget, created_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(transaction_id) DO UPDATE SET
         category = COALESCE(?, category),
             merchant_name = COALESCE(?, merchant_name),
@@ -478,6 +488,8 @@ class DatabaseManager {
             is_transfer = COALESCE(?, is_transfer),
             device_info = COALESCE(?, device_info),
             splits = COALESCE(?, splits),
+            manual_budget_id = COALESCE(?, manual_budget_id),
+            exclude_from_budget = COALESCE(?, exclude_from_budget),
             updated_at = ?
                 `;
         }
@@ -485,8 +497,8 @@ class DatabaseManager {
         const now = new Date().toISOString();
         const splitsJson = splits ? (typeof splits === 'string' ? splits : JSON.stringify(splits)) : null;
         const params = this.isPostgres
-            ? [id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splitsJson, now, now]
-            : [id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splitsJson, now, now, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splitsJson, now, id];
+            ? [id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splitsJson, manual_budget_id, exclude_from_budget, now, now]
+            : [id, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splitsJson, manual_budget_id, exclude_from_budget, now, now, category, merchant_name, account_id, date, time, note, recurring_frequency, is_transfer, device_info, splitsJson, manual_budget_id, exclude_from_budget, now, id];
 
         await this.run(sql, params);
     }
@@ -885,11 +897,13 @@ class DatabaseManager {
             SELECT t.*, a.name as account_name, a.type as account_type, a.subtype as account_subtype, 
                    a.official_name as account_official_name,
                    am.owner_name as account_owner_name, am.custom_name as account_custom_name,
-                   p.institution_name
+                   p.institution_name,
+                   tm.manual_budget_id, tm.exclude_from_budget
             FROM cached_transactions t
             LEFT JOIN cached_accounts a ON t.account_id = a.account_id
             LEFT JOIN account_metadata am ON t.account_id = am.account_id
             LEFT JOIN plaid_items p ON t.item_id = p.item_id
+            LEFT JOIN transaction_metadata tm ON t.transaction_id = tm.transaction_id
         `;
         let params = [];
 
@@ -922,27 +936,29 @@ class DatabaseManager {
             account_subtype: row.account_subtype,
             account_official_name: row.account_official_name,
             account_owner_name: row.account_owner_name,
-            institution_name: row.institution_name
+            institution_name: row.institution_name,
+            manual_budget_id: row.manual_budget_id,
+            exclude_from_budget: row.exclude_from_budget === 1
         }));
     }
 
     async addManualTransaction(id, data) {
-        const { account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splits } = data;
+        const { account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splits, manual_budget_id, exclude_from_budget } = data;
         let sql;
         const now = new Date().toISOString();
         if (this.isPostgres) {
             sql = `
                 INSERT INTO manual_transactions(
                     transaction_id, account_id, amount, date, time, name, merchant_name,
-                    category, note, recurring_frequency, is_transfer, device_info, splits, created_at, updated_at
-                ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                    category, note, recurring_frequency, is_transfer, device_info, splits, manual_budget_id, exclude_from_budget, created_at, updated_at
+                ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
                     `;
         } else {
             sql = `
                 INSERT INTO manual_transactions(
                         transaction_id, account_id, amount, date, time, name, merchant_name,
-                        category, note, recurring_frequency, is_transfer, device_info, splits, created_at, updated_at
-                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        category, note, recurring_frequency, is_transfer, device_info, splits, manual_budget_id, exclude_from_budget, created_at, updated_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         `;
         }
         const splitsJson = splits ? (typeof splits === 'string' ? splits : JSON.stringify(splits)) : null;
@@ -962,6 +978,8 @@ class DatabaseManager {
             is_transfer ?? 0,
             device_info ?? null,
             splitsJson,
+            manual_budget_id ?? null,
+            exclude_from_budget ?? 0,
             now,
             now
         ];
@@ -969,21 +987,21 @@ class DatabaseManager {
     }
 
     async updateManualTransaction(id, data) {
-        const { account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splits } = data;
+        const { account_id, amount, date, time, name, merchant_name, category, note, recurring_frequency, is_transfer, device_info, splits, manual_budget_id, exclude_from_budget } = data;
         const now = new Date().toISOString();
         let sql;
         if (this.isPostgres) {
             sql = `
                 UPDATE manual_transactions SET
         account_id = $2, amount = $3, date = $4, time = $5, name = $6, merchant_name = $7,
-            category = $8, note = $9, recurring_frequency = $10, is_transfer = $11, device_info = $12, splits = $13, updated_at = $14
+            category = $8, note = $9, recurring_frequency = $10, is_transfer = $11, device_info = $12, splits = $13, manual_budget_id = $14, exclude_from_budget = $15, updated_at = $16
                 WHERE transaction_id = $1
             `;
         } else {
             sql = `
                 UPDATE manual_transactions SET
         account_id = ?, amount = ?, date = ?, time = ?, name = ?, merchant_name = ?,
-            category = ?, note = ?, recurring_frequency = ?, is_transfer = ?, device_info = ?, splits = ?, updated_at = ?
+            category = ?, note = ?, recurring_frequency = ?, is_transfer = ?, device_info = ?, splits = ?, manual_budget_id = ?, exclude_from_budget = ?, updated_at = ?
                 WHERE transaction_id = ?
             `;
         }
@@ -1003,6 +1021,8 @@ class DatabaseManager {
             is_transfer ?? 0,
             device_info ?? null,
             splitsJson,
+            manual_budget_id ?? null,
+            exclude_from_budget ?? 0,
             now
         ];
 

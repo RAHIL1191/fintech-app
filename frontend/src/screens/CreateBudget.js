@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch, Dimensions, Modal, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -26,13 +26,13 @@ const CreateBudget = ({ navigation, route }) => {
 
     // If we are editing specific instance, default start date to that instance's month
     const defaultStartDate = (isEditMode && focusDate)
-        ? new Date(focusDate).toISOString().split('T')[0]
+        ? focusDate // Use the passed local date string directly (YYYY-MM-DD)
         : (existingBudget?.start_date || new Date().toISOString().split('T')[0]);
 
     const [startDate, setStartDate] = useState(defaultStartDate);
     const [selectedCategories, setSelectedCategories] = useState(existingBudget?.categories || []);
     const [selectedAccounts, setSelectedAccounts] = useState(existingBudget?.accounts || []);
-    const [isRollover, setIsRollover] = useState(existingBudget?.is_rollover || false);
+    const [isRollover, setIsRollover] = useState(!!existingBudget?.is_rollover);
     const [alertPercent, setAlertPercent] = useState(existingBudget?.alert_percent || 70);
 
     // Modals
@@ -43,6 +43,7 @@ const CreateBudget = ({ navigation, route }) => {
     // Data
     const [availableCategories, setAvailableCategories] = useState([]);
     const [availableAccounts, setAvailableAccounts] = useState([]);
+    const sliderWidthRef = useRef(0);
 
     useEffect(() => {
         if (step === 3) {
@@ -132,7 +133,7 @@ const CreateBudget = ({ navigation, route }) => {
     };
 
     const handleBack = () => {
-        if (step === 1) {
+        if (isEditMode || step === 1) {
             navigation.goBack();
         } else {
             setStep(step - 1);
@@ -210,7 +211,8 @@ const CreateBudget = ({ navigation, route }) => {
     );
 
     const getEditSubtitle = () => {
-        const monthName = new Date(startDate).toLocaleString('en-US', { month: 'long' });
+        // Append T00:00:00 to treat as Local Time instead of UTC to avoid previous-day shifts
+        const monthName = new Date(startDate + 'T00:00:00').toLocaleString('en-US', { month: 'long' });
         if (editMode === 'all_future') {
             return `Editing ${monthName} and all occurrences after this.`;
         } else if (editMode === 'this_only') {
@@ -264,7 +266,7 @@ const CreateBudget = ({ navigation, route }) => {
                     <View style={styles.inputIcon}><RefreshCw size={20} color="#64748B" /></View>
                     <View>
                         <Text style={styles.selectorTitle}>Repeats {recurrence}</Text>
-                        <Text style={styles.selectorSubtitle}>Starting {new Date(startDate).toLocaleDateString()}</Text>
+                        <Text style={styles.selectorSubtitle}>Starting {new Date(startDate + 'T00:00:00').toLocaleDateString()}</Text>
                     </View>
                 </View>
                 <ChevronRight size={20} color="#3B82F6" />
@@ -316,12 +318,32 @@ const CreateBudget = ({ navigation, route }) => {
             <View style={styles.sliderContainer}>
                 <View style={styles.sliderHeader}>
                     <Bell size={20} color="#64748B" />
-                    <Text style={styles.sliderLabel}>Alert me when expense reaches <Text style={{ fontWeight: '700' }}>{alertPercent}%</Text> of budget</Text>
+                    <Text style={styles.sliderLabel}>Alert me when expense reaches <Text style={{ fontWeight: '700' }}>{Math.round(alertPercent)}%</Text> of budget</Text>
                 </View>
-                <View style={styles.sliderTrack}>
+                <View
+                    style={styles.sliderTrack}
+                    onLayout={(e) => {
+                        // Store width for calculation
+                        sliderWidthRef.current = e.nativeEvent.layout.width;
+                    }}
+                    onStartShouldSetResponder={() => true}
+                    onResponderMove={(e) => {
+                        if (sliderWidthRef.current) {
+                            const newPercent = Math.max(0, Math.min(100, (e.nativeEvent.locationX / sliderWidthRef.current) * 100));
+                            setAlertPercent(Math.round(newPercent));
+                        }
+                    }}
+                    onResponderRelease={(e) => {
+                        if (sliderWidthRef.current) {
+                            const newPercent = Math.max(0, Math.min(100, (e.nativeEvent.locationX / sliderWidthRef.current) * 100));
+                            setAlertPercent(Math.round(newPercent));
+                        }
+                    }}
+                >
                     <View style={[styles.sliderFill, { width: `${alertPercent}%` }]} />
                     <View style={[styles.sliderThumb, { left: `${alertPercent}%` }]} />
                 </View>
+                <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: 8, textAlign: 'center' }}>Slide to adjust</Text>
             </View>
         </ScrollView>
     );

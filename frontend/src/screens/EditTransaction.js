@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, Modal, FlatList, Platform, Alert } from 'react-native';
 import * as Device from 'expo-device';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import CustomDatePicker from '../components/CustomDatePicker';
 import { formatCurrency, formatDateTime, formatAuditDate, cleanDeviceName } from '../utils/dateUtils';
 import CategorySelectorModal from '../components/CategorySelectorModal';
 import CalculatorModal from '../components/CalculatorModal';
-import { getCategoryIcon, getCategoryColor } from '../constants/CategoryTaxonomy';
+import { getCategoryIcon, getCategoryColor, isCategoryMatch } from '../constants/CategoryTaxonomy';
 import * as LucideIcons from 'lucide-react-native';
 
 // Helper for dynamic icons
@@ -82,6 +82,13 @@ const EditTransaction = ({ navigation, route }) => {
     const [editingSplitIndex, setEditingSplitIndex] = useState(null);
     const [showCalculatorModal, setShowCalculatorModal] = useState(false);
     const [showReminderModal, setShowReminderModal] = useState(false);
+
+    // Budget Selection State
+    const [budgets, setBudgets] = useState([]);
+    const [selectedBudget, setSelectedBudget] = useState(null); // { id, name }
+    const [excludeFromBudget, setExcludeFromBudget] = useState(false);
+    const [showBudgetModal, setShowBudgetModal] = useState(false);
+    const [showBudgetListDropdown, setShowBudgetListDropdown] = useState(false);
 
     const FREQUENCIES = ['Once', 'Daily', 'Weekly', 'Bi-weekly', 'Monthly', 'Bimonthly', 'Yearly'];
     const REMINDER_OPTIONS = [
@@ -167,6 +174,58 @@ const EditTransaction = ({ navigation, route }) => {
         fetchMerchants();
         fetchAccounts();
     }, [transaction, bill]);
+
+    // Fetch Budgets when Date changes (to get accurate "Remaining" for that month)
+    useEffect(() => {
+        fetchBudgets();
+    }, [date]);
+
+    // Initialize Manual Override from Transaction
+    useEffect(() => {
+        if (transaction) {
+            setExcludeFromBudget(!!transaction.exclude_from_budget);
+        }
+
+        // 1. Initial Load from Transaction Manual Override
+        if (transaction && transaction.manual_budget_id && transaction.manual_budget_id !== '') {
+            if (budgets.length > 0) {
+                const found = budgets.find(b => String(b.id) === String(transaction.manual_budget_id));
+                if (found) {
+                    setSelectedBudget(found);
+                }
+            }
+        }
+    }, [transaction, budgets]);
+
+    // Calculate Auto-Matching Budgets
+    const autoMatchingBudgets = useMemo(() => {
+        if (!category || !date || excludeFromBudget) return [];
+
+        return budgets.filter(b => {
+            // 1. Date Check (Month Overlap)
+            const txDateObj = new Date(date);
+            if (isNaN(txDateObj.getTime())) return false;
+            const txYear = txDateObj.getFullYear();
+            const txMonth = txDateObj.getMonth();
+            const monthStart = new Date(txYear, txMonth, 1);
+            const monthEnd = new Date(txYear, txMonth + 1, 0);
+
+            const bStart = b.start_date ? new Date(b.start_date) : null;
+            const bEnd = b.end_date ? new Date(b.end_date) : null;
+
+            if (bStart && bStart > monthEnd) return false;
+            if (bEnd && bEnd < monthStart) return false;
+
+            // 2. Category Check
+            if (b.categories && Array.isArray(b.categories)) {
+                return b.categories.some(budgetCat => isCategoryMatch(category, budgetCat));
+            }
+            return isCategoryMatch(category, b.category);
+        });
+    }, [category, date, budgets, excludeFromBudget]);
+
+    // Active Display Budgets (Manual Selected OR Auto-Matched)
+    const activeDisplayBudgets = selectedBudget ? [selectedBudget] : autoMatchingBudgets;
 
     // Date formatting functions moved to dateUtils.js
 
@@ -270,6 +329,20 @@ const EditTransaction = ({ navigation, route }) => {
             console.error('Failed to fetch accounts:', error);
         } finally {
             setIsAccountLoading(false);
+        }
+    };
+
+    const fetchBudgets = async () => {
+        try {
+            // Fetch budgets to populate selection list (w/ spent/remaining calculated for this month)
+            const queryDate = date ? new Date(date) : new Date();
+            const month = queryDate.getMonth() + 1; // 1-12
+            const year = queryDate.getFullYear();
+
+            const response = await api.get('/budgets/summary', { params: { month, year } });
+            setBudgets(response.data || []);
+        } catch (error) {
+            console.error('Failed to fetch budgets:', error);
         }
     };
 
@@ -396,8 +469,62 @@ const EditTransaction = ({ navigation, route }) => {
             is_transfer: isTransfer ? 1 : 0,
             amount: finalAmount,
             splits: isSplit ? splits : null,
-            device_info: cleanDeviceName(Device?.modelName || Device?.designName) || (Platform.OS === 'android' ? 'Android Device' : 'iOS Device')
+            device_info: cleanDeviceName(Device?.modelName || Device?.designName) || (Platform.OS === 'android' ? 'Android Device' : 'iOS Device'),
+            manual_budget_id: (!excludeFromBudget && selectedBudget) ? selectedBudget.id : null,
+            exclude_from_budget: excludeFromBudget ? 1 : 0
         };
+
+        // Budget Alert Check
+        if (!excludeFromBudget && activeDisplayBudgets.length > 0 && activeTab === 'EXPENSE') {
+            const budgetToCheck = activeDisplayBudgets[0];
+            const alertPercent = budgetToCheck.alert_percent || 70; // Default to 70% if not set
+            const limit = budgetToCheck.amount || 0;
+            const currentSpent = budgetToCheck.spent || 0;
+
+            // Adjust currentSpent for calculation:
+            // If editing, we need to try to remove old amount if possible, but we don't know the exact old contribution easily without more state.
+            // Assumption: currentSpent from backend includes the *current* state of DB.
+            // If 'add', simply add new amount.
+            // If 'edit', it's tricky. Let's simplfy: simply warn if (currentSpent + newAmount) is high, 
+            // accepting that it might double-count slightly during the 'edit' check (better safe than sorry).
+
+            const projectedSpent = currentSpent + finalAmount;
+            const usagePercent = (projectedSpent / limit) * 100;
+
+            if (usagePercent > alertPercent) {
+                // Check if we haven't already warned (optional, but for now just block with alert)
+                // We need to use a Promise or state to pause execution, but standard Alert is async in logic but callback based.
+                // We must wrap the save call.
+
+                // Since I cannot rewrite the entire function easily to be async-await halted, 
+                // I will modify this to RETURN if user cancels, but I need to wrap the rest of the logic.
+                // Actually, simpler: Use a flag or split the function.
+                // Given the complexity of "edit vs add" and tool limitations, let's just show the alert and NOT block, 
+                // OR block and require them to press "Save" again? No that's bad UX.
+
+                // Correct approach: Async Alert
+                const shouldProceed = await new Promise((resolve) => {
+                    // If it's already over, maybe don't annoy them every time? 
+                    // Only alert if it *crosses* the threshold or if they are already over?
+                    // User asked "when budget goes over...".
+
+                    // Message Construction
+                    const percentStr = usagePercent.toFixed(0);
+                    const msg = `This transaction will put your '${budgetToCheck.name}' budget at ${percentStr}% used (Alert set at ${alertPercent}%). Proceed?`;
+
+                    Alert.alert(
+                        'Budget Alert',
+                        msg,
+                        [
+                            { text: 'Cancel', onPress: () => resolve(false), style: 'cancel' },
+                            { text: 'Continue', onPress: () => resolve(true) }
+                        ]
+                    );
+                });
+
+                if (!shouldProceed) return;
+            }
+        }
 
         // Validation for splits
         if (isSplit) {
@@ -710,6 +837,49 @@ const EditTransaction = ({ navigation, route }) => {
                     ) : (
                         /* STANDARD FORM LAYOUT (Existing Code) */
                         <>
+
+
+                            {/* Budget Selection Row (Visible only for Expense) */}
+                            {!isSplit && (activeTab === 'EXPENSE') && (
+                                <TouchableOpacity
+                                    style={styles.listItem}
+                                    onPress={() => setShowBudgetModal(true)}
+                                >
+                                    <View style={[styles.itemIconCircle, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}>
+                                        <LucideIcons.PiggyBank size={20} color="#94A3B8" />
+                                    </View>
+                                    <View style={styles.itemContent}>
+                                        <Text style={{ fontSize: 13, color: '#64748B', marginBottom: 2 }}>Budget Selection</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Text style={styles.itemValue}>
+                                                    {excludeFromBudget ? 'Do not include' : (
+                                                        activeDisplayBudgets.length > 0
+                                                            ? (selectedBudget ? `Manual: ${selectedBudget.name}` : activeDisplayBudgets[0].name)
+                                                            : 'Unbudgeted'
+                                                    )}
+                                                </Text>
+                                                {/* Multi-budget indicator +N */}
+                                                {!selectedBudget && activeDisplayBudgets.length > 1 && (
+                                                    <View style={{ marginLeft: 8, backgroundColor: '#EFF6FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12 }}>
+                                                        <Text style={{ color: '#3B82F6', fontSize: 12, fontWeight: '700' }}>
+                                                            +{activeDisplayBudgets.length - 1}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </View>
+
+                                            {(!excludeFromBudget && activeDisplayBudgets.length > 0) && (
+                                                <Text style={{ fontSize: 13, color: activeDisplayBudgets[0].remaining < 0 ? '#EF4444' : '#10B981', fontWeight: '500' }}>
+                                                    {activeDisplayBudgets[0].remaining < 0 ? 'Over' : 'Rem'}: ${formatCurrency(Math.abs(activeDisplayBudgets[0].remaining || 0)).replace('$', '')}
+                                                </Text>
+                                            )}
+                                        </View>
+                                    </View>
+                                    <ChevronRight size={20} color="#CBD5E1" />
+                                </TouchableOpacity>
+                            )}
+
                             {/* Category Selection or Split List */}
                             {!isSplit ? (
                                 <TouchableOpacity
@@ -933,7 +1103,7 @@ const EditTransaction = ({ navigation, route }) => {
                     )}
                 </View>
                 <View style={{ height: 120 }} />
-            </ScrollView>
+            </ScrollView >
 
             <Modal
                 visible={showFrequencyModal}
@@ -1360,9 +1530,179 @@ const EditTransaction = ({ navigation, route }) => {
                     </View>
                 </TouchableOpacity>
             </Modal>
-        </SafeAreaView>
+            {/* Budget Selection Modal */}
+            <Modal
+                visible={showBudgetModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowBudgetModal(false)}
+            >
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                    <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' }}>
+                        <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A' }}>Budget Options</Text>
+                            <TouchableOpacity onPress={() => setShowBudgetModal(false)}>
+                                <X size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={{ padding: 16 }}>
+                            {/* Option 1: Assigned / Included Budgets */}
+                            {!excludeFromBudget && activeDisplayBudgets.length > 0 && (
+                                <View style={{ marginBottom: 24 }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <Text style={{ fontSize: 14, color: '#64748B', fontWeight: '500' }}>
+                                            Included in {selectedBudget ? 'this budget (Manual)' : 'these budgets (Auto)'}
+                                        </Text>
+                                        {/* Clear Selection Button if Manual */}
+                                        {selectedBudget && (
+                                            <TouchableOpacity onPress={() => setSelectedBudget(null)}>
+                                                <Text style={{ fontSize: 13, color: '#3B82F6', fontWeight: '600' }}>Reset to Auto</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+
+                                    {activeDisplayBudgets.map((b) => (
+                                        <View key={b.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 8 }}>
+                                            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: b.color ? `${b.color}20` : '#E0F2FE', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                                <LucideIcons.PiggyBank size={20} color={b.color || "#0EA5E9"} />
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ fontSize: 16, fontWeight: '600', color: '#0F172A' }}>{b.name}</Text>
+                                            </View>
+                                            <Text style={{ fontSize: 14, fontWeight: '700', color: b.remaining < 0 ? '#EF4444' : '#10B981' }}>
+                                                {b.remaining < 0 ? 'Over' : 'Rem'}: ${formatCurrency(Math.abs(b.remaining || 0)).replace('$', '')}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+
+                            {/* Separator OR */}
+                            {(!excludeFromBudget && activeDisplayBudgets.length > 0) && (
+                                <View style={{ alignItems: 'center', marginBottom: 24 }}>
+                                    <Text style={{ fontSize: 14, color: '#94A3B8', fontWeight: '500' }}>OR</Text>
+                                </View>
+                            )}
+
+                            {/* Option 2: Select Budget List (Collapsible) */}
+                            <TouchableOpacity
+                                onPress={() => setShowBudgetListDropdown(!showBudgetListDropdown)}
+                                style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}
+                            >
+                                <Text style={{ fontSize: 14, color: '#64748B', fontWeight: '500', marginRight: 8, flex: 1 }}>
+                                    Select Budget
+                                </Text>
+                                {showBudgetListDropdown ? <LucideIcons.ChevronUp size={20} color="#64748B" /> : <LucideIcons.ChevronDown size={20} color="#64748B" />}
+                            </TouchableOpacity>
+                            <Text style={{ fontSize: 12, color: '#94A3B8', marginBottom: 12, marginTop: -8 }}>
+                                To include this tnx into a specific budget only.
+                            </Text>
+
+                            {showBudgetListDropdown && (
+                                <View style={{ backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4 }}>
+                                    {budgets.filter(b => {
+                                        if (!date) return true;
+                                        // Calculate Transaction Month Range
+                                        const txDateObj = new Date(date);
+                                        if (isNaN(txDateObj.getTime())) return true;
+                                        const txYear = txDateObj.getFullYear();
+                                        const txMonth = txDateObj.getMonth();
+                                        const monthStart = new Date(txYear, txMonth, 1);
+                                        const monthEnd = new Date(txYear, txMonth + 1, 0);
+
+                                        const bStart = b.start_date ? new Date(b.start_date) : null;
+                                        const bEnd = b.end_date ? new Date(b.end_date) : null;
+
+                                        if (bStart && bStart > monthEnd) return false;
+                                        if (bEnd && bEnd < monthStart) return false;
+
+                                        return true;
+                                    }).length === 0 ? (
+                                        <Text style={{ padding: 16, color: '#64748B', textAlign: 'center' }}>No budgets for this month.</Text>
+                                    ) : (
+                                        budgets.filter(b => {
+                                            if (!date) return true;
+                                            const txDateObj = new Date(date);
+                                            if (isNaN(txDateObj.getTime())) return true;
+                                            const txYear = txDateObj.getFullYear();
+                                            const txMonth = txDateObj.getMonth();
+                                            const monthStart = new Date(txYear, txMonth, 1);
+                                            const monthEnd = new Date(txYear, txMonth + 1, 0);
+                                            const bStart = b.start_date ? new Date(b.start_date) : null;
+                                            const bEnd = b.end_date ? new Date(b.end_date) : null;
+                                            if (bStart && bStart > monthEnd) return false;
+                                            if (bEnd && bEnd < monthStart) return false;
+                                            return true;
+                                        }).map((b, index) => (
+                                            <TouchableOpacity
+                                                key={b.id}
+                                                style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: 12,
+                                                    backgroundColor: (selectedBudget?.id === b.id && !excludeFromBudget) ? '#FFF' : 'transparent',
+                                                    borderRadius: 8,
+                                                    marginBottom: 2,
+                                                    shadowColor: (selectedBudget?.id === b.id && !excludeFromBudget) ? "#000" : "transparent",
+                                                    shadowOffset: { width: 0, height: 1 },
+                                                    shadowOpacity: (selectedBudget?.id === b.id && !excludeFromBudget) ? 0.05 : 0,
+                                                    shadowRadius: 2,
+                                                    elevation: (selectedBudget?.id === b.id && !excludeFromBudget) ? 1 : 0,
+                                                }}
+                                                onPress={() => {
+                                                    setSelectedBudget(b);
+                                                    setExcludeFromBudget(false);
+                                                }}
+                                            >
+                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: b.color || '#3B82F6', marginRight: 12 }} />
+                                                    <Text style={{ fontSize: 14, color: (selectedBudget?.id === b.id && !excludeFromBudget) ? '#0F172A' : '#475569', fontWeight: (selectedBudget?.id === b.id && !excludeFromBudget) ? '600' : '400' }}>
+                                                        {b.name}
+                                                    </Text>
+                                                </View>
+                                                {(selectedBudget?.id === b.id && !excludeFromBudget) && <LucideIcons.Check size={16} color="#3B82F6" />}
+                                            </TouchableOpacity>
+                                        ))
+                                    )}
+                                </View>
+                            )}
+
+                            {/* Separator OR */}
+                            <View style={{ alignItems: 'center', marginVertical: 24 }}>
+                                <Text style={{ fontSize: 14, color: '#94A3B8', fontWeight: '500' }}>OR</Text>
+                            </View>
+
+                            {/* Option 3: Exclude */}
+                            <TouchableOpacity
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12 }}
+                                onPress={() => {
+                                    setExcludeFromBudget(!excludeFromBudget);
+                                    if (!excludeFromBudget) setSelectedBudget(null);
+                                }}
+                            >
+                                <Text style={{ fontSize: 15, fontWeight: '500', color: '#0F172A' }}>Do not include in budget</Text>
+                                <Switch
+                                    value={excludeFromBudget}
+                                    onValueChange={(val) => {
+                                        setExcludeFromBudget(val);
+                                        if (val) setSelectedBudget(null);
+                                    }}
+                                    trackColor={{ false: '#E2E8F0', true: '#EF4444' }}
+                                    thumbColor="#FFF"
+                                />
+                            </TouchableOpacity>
+
+                            <View style={{ height: 40 }} />
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+        </SafeAreaView >
     );
 };
+
 
 const styles = StyleSheet.create({
     card: {

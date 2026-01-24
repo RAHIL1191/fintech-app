@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X, AlertCircle, DollarSign } from 'lucide-react-native';
+import { ArrowLeft, Pencil, MoreVertical, ChevronLeft, ChevronRight, X, AlertCircle, DollarSign, ArrowUp } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
 import api from '../config/api';
 import BudgetTransactionsModal from '../components/BudgetTransactionsModal';
@@ -16,14 +17,17 @@ const BudgetDetails = ({ navigation, route }) => {
     // State for modals
     const [showEditModal, setShowEditModal] = useState(false);
     const [showOptionsModal, setShowOptionsModal] = useState(false);
+    const [showAddAmountModal, setShowAddAmountModal] = useState(false);
     const [showExpensesModal, setShowExpensesModal] = useState(false);
     const [showCategoriesModal, setShowCategoriesModal] = useState(false);
     const [overspendingAlert, setOverspendingAlert] = useState(true);
     const [spendingAlert, setSpendingAlert] = useState(true);
 
-    useEffect(() => {
-        fetchBudgetDetails();
-    }, [currentDate]);
+    useFocusEffect(
+        React.useCallback(() => {
+            fetchBudgetDetails();
+        }, [currentDate]) /* also depends on currentDate */
+    );
 
     const fetchBudgetDetails = async () => {
         // Use name as anchor to handle split budgets (different IDs for different months)
@@ -50,6 +54,11 @@ const BudgetDetails = ({ navigation, route }) => {
                 setBudget(response.data);
             }
         } catch (error) {
+            if ((error.response && error.response.status === 404) || (error.message && error.message.includes('404'))) {
+                console.log('Budget not found (404), navigating back.');
+                navigation.goBack();
+                return;
+            }
             console.error('Failed to fetch budget details:', error);
         } finally {
             setLoading(false);
@@ -66,10 +75,23 @@ const BudgetDetails = ({ navigation, route }) => {
 
     const spent = budget.spent || 0;
     const limit = budget.limit || budget.amount || 0;
-    const remaining = limit - spent;
-    const isOver = spent > limit;
-    const overAmount = isOver ? spent - limit : 0;
-    const percent = limit > 0 ? (spent / limit) * 100 : 0;
+    // Include rollover in remaining calc
+    const rollover = budget.rollover_amount || 0;
+    const totalAvailable = limit + rollover;
+
+    // Remaining is now Total Available - Spent
+    const remaining = totalAvailable - spent;
+    // Over is if spent > totalAvailable
+    const isOver = spent > totalAvailable;
+    const overAmount = isOver ? spent - totalAvailable : 0;
+
+    // Percent is complex now. Default: spent / limit? Or spent / totalAvailable?
+    // Picture shows "Spent $229 of $800" (base limit). 
+    // And "Rollover $0".
+    // If rollover was $100, Total = $900.
+    // Ideally percent uses totalAvailable if > 0.
+    const effectiveLimit = totalAvailable > 0 ? totalAvailable : limit;
+    const percent = effectiveLimit > 0 ? (spent / effectiveLimit) * 100 : 0;
 
     // Safe Icon resolution
     const Icon = (budget.icon && LucideIcons[budget.icon]) ? LucideIcons[budget.icon] : DollarSign;
@@ -104,21 +126,35 @@ const BudgetDetails = ({ navigation, route }) => {
 
     const handleEditThisOnly = () => {
         setShowEditModal(false);
+        // Pass local 'YYYY-MM-DD' string to avoid UTC timezone shifts
+        // Force day to '01' to preserve monthly budget cycle, otherwise it acts as if budget starts on today's date
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = '01';
+        const localDateStr = `${year}-${month}-${day}`;
+
         // Navigate to edit screen for this occurrence only using PUSH to force fresh state
         navigation.push('CreateBudget', {
             budget,
             editMode: 'this_only',
-            focusDate: currentDate.toISOString()
+            focusDate: localDateStr
         });
     };
 
     const handleEditAllFuture = () => {
         setShowEditModal(false);
+        // Pass local 'YYYY-MM-DD' string to avoid UTC timezone shifts
+        // Force day to '01' to preserve monthly budget cycle
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = '01';
+        const localDateStr = `${year}-${month}-${day}`;
+
         // Navigate to edit screen for all future occurrences
         navigation.push('CreateBudget', {
             budget,
             editMode: 'all_future',
-            focusDate: currentDate.toISOString()
+            focusDate: localDateStr
         });
     };
 
@@ -188,6 +224,81 @@ const BudgetDetails = ({ navigation, route }) => {
         }
     };
 
+    const renderAddAmountModal = () => (
+        <Modal
+            animationType="slide"
+            transparent={true}
+            visible={showAddAmountModal}
+            onRequestClose={() => setShowAddAmountModal(false)}
+        >
+            <TouchableOpacity
+                style={styles.editModalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowAddAmountModal(false)}
+            >
+                <View style={styles.editModalContent}>
+                    <View style={styles.editModalHeader}>
+                        <Text style={styles.optionsModalTitle}>Add Amount</Text>
+                        <TouchableOpacity onPress={() => setShowAddAmountModal(false)}>
+                            <X size={24} color="#64748B" />
+                        </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                        style={[styles.editOption, { flexDirection: 'row', alignItems: 'center' }]}
+                        onPress={() => {
+                            setShowAddAmountModal(false);
+                            // Construct local date string to pass context (e.g. 2026-02-01)
+                            const year = currentDate.getFullYear();
+                            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                            const day = '01'; // Default to start of month for context
+                            const localDateStr = `${year}-${month}-${day}`;
+
+                            navigation.push('MoveBudgetAmount', {
+                                activeBudget: budget,
+                                dateStr: localDateStr,
+                                mode: 'pull' // Moving TO this budget (Target)
+                            });
+                        }}
+                    >
+                        <View style={{ marginRight: 12 }}>
+                            <Icon size={20} color="#64748B" style={{ transform: [{ rotate: '90deg' }] }} />
+                        </View>
+                        {/* Reusing existing editOption styles but adding content */}
+                        <View>
+                            <Text style={styles.editOptionTitle}>Move amount from other budget</Text>
+                        </View>
+                        <ChevronRight size={20} color="#94A3B8" style={{ marginLeft: 'auto' }} />
+                    </TouchableOpacity>
+
+                    <View style={styles.editOptionDivider} />
+
+                    <TouchableOpacity
+                        style={[styles.editOption, { flexDirection: 'row', alignItems: 'center' }]}
+                        onPress={() => {
+                            setShowAddAmountModal(false);
+                            // Default to "Edit This Only" logic for "Increase amount of this budget"
+                            // If budget is 'One Time', handleEditPress handles it correctly too (navigates directly)
+                            if (budget.recurrence_frequency === 'One Time') {
+                                handleEditPress();
+                            } else {
+                                handleEditThisOnly();
+                            }
+                        }}
+                    >
+                        <View style={{ marginRight: 12 }}>
+                            <ArrowUp size={20} color="#64748B" />
+                        </View>
+                        <View>
+                            <Text style={styles.editOptionTitle}>Increase amount of this budget</Text>
+                        </View>
+                        <ChevronRight size={20} color="#94A3B8" style={{ marginLeft: 'auto' }} />
+                    </TouchableOpacity>
+                </View>
+            </TouchableOpacity>
+        </Modal>
+    );
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header */}
@@ -247,7 +358,7 @@ const BudgetDetails = ({ navigation, route }) => {
                             <Text style={styles.overAmount}>${overAmount.toFixed(0)}</Text>
                             <Text style={styles.overLabel}>Over</Text>
                         </View>
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={() => setShowAddAmountModal(true)}>
                             <Text style={styles.addAmountBtn}>ADD AMOUNT &gt;</Text>
                         </TouchableOpacity>
                     </View>
@@ -260,6 +371,21 @@ const BudgetDetails = ({ navigation, route }) => {
                             <Text style={[styles.overAmount, { color: '#16A34A' }]}>${remaining.toFixed(0)}</Text>
                             <Text style={[styles.overLabel, { color: '#16A34A' }]}>Remaining</Text>
                         </View>
+                        <TouchableOpacity onPress={() => {
+                            // Construct local date string to pass context (e.g. 2026-02-01)
+                            const year = currentDate.getFullYear();
+                            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                            const day = '01'; // Default to start of month for context
+                            const localDateStr = `${year}-${month}-${day}`;
+
+                            navigation.push('MoveBudgetAmount', {
+                                activeBudget: budget,
+                                dateStr: localDateStr,
+                                mode: 'push' // Moving FROM this budget (Source)
+                            });
+                        }}>
+                            <Text style={[styles.addAmountBtn, { color: '#16A34A' }]}>MOVE AMOUNT &gt;</Text>
+                        </TouchableOpacity>
                     </View>
                 )}
 
@@ -271,6 +397,18 @@ const BudgetDetails = ({ navigation, route }) => {
                         <ChevronRight size={16} color="#94A3B8" />
                     </TouchableOpacity>
                 </View>
+
+                {/* Rollover Row */}
+                {!!budget.is_rollover && (
+                    <View style={styles.detailRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={styles.detailLabel}>Rollover from previous period</Text>
+                        </View>
+                        <View style={styles.detailValue}>
+                            <Text style={styles.detailAmount}>${rollover.toFixed(0)}</Text>
+                        </View>
+                    </View>
+                )}
 
                 <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Expenses</Text>
@@ -402,6 +540,7 @@ const BudgetDetails = ({ navigation, route }) => {
                 categories={budget.categories || []}
                 budgetName={budget.name}
             />
+            {renderAddAmountModal()}
         </SafeAreaView>
     );
 };

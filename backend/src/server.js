@@ -792,10 +792,10 @@ app.post('/api/fix-categories', async (req, res) => {
     }
 });
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
     try {
         await db.init();
-        console.log(`Server running on port ${PORT}`);
+        console.log(`Server running on port ${PORT} (0.0.0.0)`);
     } catch (err) {
         console.error('Failed to start server due to DB error:', err);
         process.exit(1);

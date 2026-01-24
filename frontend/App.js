@@ -26,6 +26,7 @@ import Insights from './src/screens/Insights';
 import BillDetails from './src/screens/BillDetails';
 import CreateBudget from './src/screens/CreateBudget';
 import BudgetDetails from './src/screens/BudgetDetails';
+import MoveBudgetAmount from './src/screens/MoveBudgetAmount';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -147,6 +148,7 @@ export default function App() {
                         <RootStack.Screen name="MainTabs" component={MainTabs} />
                         <RootStack.Screen name="CreateBudget" component={CreateBudget} />
                         <RootStack.Screen name="BudgetDetails" component={BudgetDetails} />
+                        <RootStack.Screen name="MoveBudgetAmount" component={MoveBudgetAmount} />
                         <RootStack.Screen name="MerchantRules" component={MerchantRules} />
                         <RootStack.Screen name="Transactions" component={Transactions} />
                         <RootStack.Screen name="BillDetails" component={BillDetails} />
