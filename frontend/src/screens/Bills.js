@@ -7,6 +7,7 @@ import { Menu, SlidersHorizontal, Download, Plus, Receipt, Search, RefreshCw, Za
 import api from '../config/api';
 import { getCategoryIcon, getCategoryColor } from '../constants/CategoryTaxonomy';
 import * as LucideIcons from 'lucide-react-native';
+import { NotificationService } from '../services/NotificationService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -106,6 +107,9 @@ const Bills = ({ navigation }) => {
             const response = await api.get('/bills/upcoming');
             const grouped = response.data.grouped || [];
             setUpcomingBills(grouped);
+
+            // Check for bill reminders (async)
+            NotificationService.checkBillReminders(grouped);
 
             // Calculate overdue bills for badge
             let overdueCount = 0;

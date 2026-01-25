@@ -5,6 +5,7 @@ import { Menu, Plus, AlignJustify, ChevronLeft, ChevronRight, X, AlertCircle, Ch
 import * as LucideIcons from 'lucide-react-native';
 import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import api from '../config/api';
+import { NotificationService } from '../services/NotificationService';
 
 const { width } = Dimensions.get('window');
 
@@ -17,6 +18,11 @@ const Budget = ({ navigation }) => {
     const [showProgressModal, setShowProgressModal] = useState(false);
     const [selectedBudgetIds, setSelectedBudgetIds] = useState(new Set());
     const isFocused = useIsFocused();
+
+    useEffect(() => {
+        // Initialize notifications permission on mount
+        NotificationService.registerForPushNotificationsAsync();
+    }, []);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -72,6 +78,13 @@ const Budget = ({ navigation }) => {
             fetchedBudgets = Array.from(budgetMap.values());
 
             setBudgets(fetchedBudgets);
+
+            // Trigger alerts check only if we are viewing the CURRENT month
+            const now = new Date();
+            if (month === now.getMonth() + 1 && year === now.getFullYear()) {
+                NotificationService.checkBudgetAlerts(fetchedBudgets);
+            }
+
             // Auto-select all budgets by default on first load
             if (selectedBudgetIds.size === 0 && fetchedBudgets.length > 0) {
                 setSelectedBudgetIds(new Set(fetchedBudgets.map(b => b.id)));

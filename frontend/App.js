@@ -27,6 +27,7 @@ import BillDetails from './src/screens/BillDetails';
 import CreateBudget from './src/screens/CreateBudget';
 import BudgetDetails from './src/screens/BudgetDetails';
 import MoveBudgetAmount from './src/screens/MoveBudgetAmount';
+import SearchScreen from './src/screens/SearchScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -160,6 +161,7 @@ export default function App() {
                         <RootStack.Screen name="TransactionDetails" component={TransactionDetails} />
                         <RootStack.Screen name="CashFlow" component={CashFlow} />
                         <RootStack.Screen name="AccountTransactions" component={AccountTransactions} />
+                        <RootStack.Screen name="SearchScreen" component={SearchScreen} />
                     </RootStack.Navigator>
                 </NavigationContainer>
             </SafeAreaProvider>

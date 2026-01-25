@@ -1,377 +1,574 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigation } from '@react-navigation/native';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Wallet, ArrowUpRight, ArrowDownLeft, Plus, CreditCard, PieChart } from 'lucide-react-native';
-import PlaidLink from '../components/PlaidLink';
+import { Search, ChevronRight, Wallet, CreditCard, AlertCircle } from 'lucide-react-native';
 import api from '../config/api';
+import { getCategoryIcon, getCategoryColor } from '../constants/CategoryTaxonomy';
+import * as LucideIcons from 'lucide-react-native';
+
+const { width } = Dimensions.get('window');
+
+// Helper: Get Greeting based on time
+const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+};
 
 const Dashboard = () => {
     const navigation = useNavigation();
-    const [loading, setLoading] = useState(false);
-    const [accessToken, setAccessToken] = useState(null);
-    const [balance, setBalance] = useState({ total: '0.00', income: '0.00', expenses: '0.00' });
-    const [transactions, setTransactions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-    const fetchDashboardData = async (forceSync = false) => {
-        setLoading(true);
+    // Widget Data States
+    const [accounts, setAccounts] = useState([]);
+    const [billsSummary, setBillsSummary] = useState({ upcoming: 0, overdue: 0, paid: 0 });
+    const [topExpenses, setTopExpenses] = useState([]);
+    const [budgets, setBudgets] = useState([]);
+    const [cashFlow, setCashFlow] = useState({ income: 0, expenses: 0, net: 0 });
+
+    const fetchDashboardData = async () => {
         try {
-            console.log('Fetching transactions from backend...');
-            const params = {};
-            if (forceSync || (typeof forceSync === 'object' && forceSync.nativeEvent)) {
-                // If called from RefreshControl, forceSync might be the event object
-                params.sync = 'true';
-            }
+            // Fetch Accounts
+            const accRes = await api.get('/accounts');
+            setAccounts(accRes.data.accounts || []);
 
-            const response = await api.get('/transactions', { params });
+            // Fetch Bills Summary (from /upcoming)
+            const billsRes = await api.get('/bills/upcoming');
+            const now = new Date();
+            const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-            console.log('Frontend: Received API response');
-            const accounts = response.data.accounts || [];
-            const totalBalance = accounts.reduce((sum, acc) => sum + (acc.balances.current || 0), 0);
+            // Filter to current month only
+            const rawBills = (billsRes.data.grouped || []).flatMap(g => g.bills);
+            const allBills = rawBills.filter(b => b.dueDate && b.dueDate.startsWith(thisMonthStr));
 
-            const plaidTransactions = response.data.transactions || [];
+            const upcoming = allBills.filter(b => !b.isPastDue && !b.isToday).reduce((s, b) => s + b.amount, 0);
+            const overdue = allBills.filter(b => b.isPastDue).reduce((s, b) => s + b.amount, 0);
+            // Fetch Paid for current month
+            const paidRes = await api.get('/bills/paid');
+            const currentMonthKey = now.toLocaleString('default', { month: 'long' });
+            const paidGroup = (paidRes.data.grouped || []).find(g => g.month && g.month.startsWith(currentMonthKey));
+            const paid = paidGroup ? paidGroup.total : 0;
+            setBillsSummary({ upcoming, overdue, paid });
 
-            // Calculate Income and Expenses (Excluding Transfers)
-            const income = plaidTransactions
-                .filter(t => t.amount < 0 && !t.is_transfer)
-                .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+            // Fetch Top Expenses (from Insights logic - category breakdown)
+            const txRes = await api.get('/transactions');
+            const transactions = txRes.data.transactions || [];
+            // Filter to current month expenses
+            const monthlyExpenses = transactions.filter(t => t.date && t.date.startsWith(thisMonthStr) && t.amount > 0 && !t.is_transfer);
 
-            const expenses = plaidTransactions
-                .filter(t => t.amount > 0 && !t.is_transfer)
-                .reduce((sum, t) => sum + t.amount, 0);
-
-            const formattedTxs = plaidTransactions.map(tx => ({
-                ...tx, // Preserve raw data for TransactionDetails
-                id: tx.transaction_id,
-                title: tx.name,
-                amount: `${tx.amount < 0 ? '+' : '-'}$${Math.abs(tx.amount).toFixed(2)}`,
-                category: tx.category ? tx.category[0] : 'General',
-                date: tx.date,
-                isIncome: tx.amount < 0
-            })).slice(0, 10);
-
-            setBalance({
-                total: totalBalance.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
-                income: income.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
-                expenses: expenses.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+            // Group by Category
+            const catMap = {};
+            monthlyExpenses.forEach(t => {
+                const cat = t.personal_finance_category?.primary || t.category?.[0] || 'Other';
+                if (!catMap[cat]) catMap[cat] = 0;
+                catMap[cat] += t.amount;
             });
-            setTransactions(formattedTxs);
+            const sorted = Object.entries(catMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
+            setTopExpenses(sorted.map(([name, amount]) => ({ name, amount })));
+
+            // Fetch Budgets
+            const budgetRes = await api.get('/budgets/summary', { params: { month: now.getMonth() + 1, year: now.getFullYear() } });
+            setBudgets(budgetRes.data || []);
+
+            // Cash Flow
+            const income = transactions.filter(t => t.date && t.date.startsWith(thisMonthStr) && t.amount < 0 && !t.is_transfer).reduce((s, t) => s + Math.abs(t.amount), 0);
+            const expenses = monthlyExpenses.reduce((s, t) => s + t.amount, 0);
+            setCashFlow({ income, expenses, net: income - expenses });
+
         } catch (error) {
-            console.error('Error fetching dashboard data:', error);
-            const msg = error.response ? JSON.stringify(error.response.data) : error.message;
-            Alert.alert('Data Error', `Failed to load transactions.\n\nError: ${msg}`);
+            console.error('Dashboard fetch error:', error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
-    const handleSuccess = (token) => {
-        console.log('Successfully linked account! Access Token received.');
-        fetchDashboardData(token);
+    useFocusEffect(
+        useCallback(() => {
+            fetchDashboardData();
+        }, [])
+    );
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchDashboardData();
     };
 
-    useEffect(() => {
-        fetchDashboardData();
-    }, []);
+    // --- WIDGETS ---
+
+    const renderAccountsWidget = () => {
+        const cashAccounts = accounts.filter(a => a.type === 'depository');
+        const creditAccounts = accounts.filter(a => a.type === 'credit');
+        const cashTotal = cashAccounts.reduce((s, a) => s + (a.balances?.current || 0), 0);
+        const creditTotal = creditAccounts.reduce((s, a) => s + (a.balances?.current || 0), 0);
+
+        return (
+            <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Accounts')}>
+                <View style={styles.widgetHeader}>
+                    <Text style={styles.widgetTitle}>Accounts</Text>
+                    <ChevronRight size={20} color="#3B82F6" />
+                </View>
+                <View style={styles.accountsRow}>
+                    <View style={styles.accountCol}>
+                        <Text style={styles.accountLabel}>Cash</Text>
+                        <View style={[styles.accountIconCircle, { backgroundColor: '#FEE2E2' }]}>
+                            <Wallet size={24} color="#EF4444" />
+                        </View>
+                        <Text style={styles.accountAmount}>${cashTotal.toLocaleString()}</Text>
+                    </View>
+                    <View style={styles.accountDivider} />
+                    <View style={styles.accountCol}>
+                        <Text style={styles.accountLabel}>Credit</Text>
+                        <View style={[styles.accountIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                            <CreditCard size={24} color="#3B82F6" />
+                        </View>
+                        <Text style={styles.accountAmount}>${creditTotal.toLocaleString()}</Text>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
+    const renderBillsWidget = () => (
+        <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Bills')}>
+            <View style={styles.widgetHeader}>
+                <Text style={styles.widgetTitle}>Bills</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.widgetSubtitle}>{new Date().toLocaleString('default', { month: 'short' })}</Text>
+                    <ChevronRight size={20} color="#3B82F6" />
+                </View>
+            </View>
+            <View style={styles.billsRow}>
+                <View style={styles.billStat}>
+                    <View style={[styles.billDot, { backgroundColor: '#F59E0B' }]} />
+                    <Text style={styles.billStatLabel}>Upcoming</Text>
+                    <Text style={styles.billStatValue}>${billsSummary.upcoming.toFixed(0)}</Text>
+                </View>
+                <View style={styles.billStat}>
+                    <View style={[styles.billDot, { backgroundColor: '#EF4444' }]} />
+                    <Text style={styles.billStatLabel}>Overdue</Text>
+                    <Text style={styles.billStatValue}>${billsSummary.overdue.toFixed(0)}</Text>
+                </View>
+                <View style={styles.billStat}>
+                    <View style={[styles.billDot, { backgroundColor: '#10B981' }]} />
+                    <Text style={styles.billStatLabel}>Paid</Text>
+                    <Text style={styles.billStatValue}>${billsSummary.paid.toFixed(0)}</Text>
+                </View>
+            </View>
+        </TouchableOpacity>
+    );
+
+    const renderTopExpensesWidget = () => {
+        const total = topExpenses.reduce((s, e) => s + e.amount, 0);
+        return (
+            <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Insights')}>
+                <View style={styles.widgetHeader}>
+                    <Text style={styles.widgetTitle}>Top Expenses <Text style={styles.widgetSubtitle}>| {new Date().toLocaleString('default', { month: 'short' })}</Text></Text>
+                    <ChevronRight size={20} color="#3B82F6" />
+                </View>
+                <View style={styles.expensesRow}>
+                    {topExpenses.map((exp, idx) => {
+                        const iconName = getCategoryIcon(exp.name);
+                        const IconComponent = LucideIcons[iconName] || LucideIcons.Tag;
+                        const iconColor = getCategoryColor(exp.name);
+                        return (
+                            <View key={idx} style={styles.expenseItem}>
+                                <View style={[styles.expenseIcon, { backgroundColor: iconColor + '20' }]}>
+                                    <IconComponent size={18} color={iconColor} />
+                                </View>
+                                <Text style={styles.expenseName} numberOfLines={1}>{exp.name}</Text>
+                                <Text style={styles.expenseAmount}>${exp.amount.toFixed(0)}</Text>
+                            </View>
+                        );
+                    })}
+                </View>
+                <Text style={styles.totalText}>${total.toFixed(0)}</Text>
+            </TouchableOpacity>
+        );
+    };
+
+    const renderBudgetWidget = () => {
+        const currentMonth = new Date().toLocaleString('default', { month: 'short' });
+        return (
+            <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Budget')}>
+                <View style={styles.widgetHeader}>
+                    <Text style={styles.widgetTitle}>Budget</Text>
+                    <ChevronRight size={20} color="#3B82F6" />
+                </View>
+                {budgets.length === 0 ? (
+                    <Text style={styles.emptyText}>No budgets for this month.</Text>
+                ) : (
+                    budgets.slice(0, 2).map(b => {
+                        const spent = b.spent || 0;
+                        const limit = b.amount || 0;
+                        const percent = limit > 0 ? (spent / limit) * 100 : 0;
+                        const isOver = spent > limit;
+                        return (
+                            <View key={b.id} style={styles.budgetItem}>
+                                {/* Header Row: Icon + Name + Limit Amount */}
+                                <View style={styles.budgetHeaderRow}>
+                                    <View style={styles.budgetIconCircle}>
+                                        <Text style={styles.budgetIconText}>$</Text>
+                                    </View>
+                                    <Text style={styles.budgetName}>{b.name}</Text>
+                                    <Text style={styles.budgetLimitAmount}>${limit.toFixed(0)}</Text>
+                                </View>
+
+                                {/* Progress Bar with Text Overlay */}
+                                <View style={styles.budgetBarContainer}>
+                                    <View style={styles.budgetBarBg}>
+                                        <View style={[
+                                            styles.budgetBar,
+                                            {
+                                                width: `${Math.min(percent, 100)}%`,
+                                                backgroundColor: isOver ? '#EF4444' : '#3B82F6'
+                                            }
+                                        ]}>
+                                            <Text style={styles.budgetBarText}>
+                                                Spent ${spent.toFixed(0)} of ${limit.toFixed(0)}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                {/* Footer Row: Percentage + Month */}
+                                <View style={styles.budgetFooterRow}>
+                                    <Text style={[styles.budgetPercent, isOver && { color: '#EF4444' }]}>
+                                        {percent.toFixed(1)}%
+                                    </Text>
+                                    <Text style={styles.budgetMonth}>{currentMonth}</Text>
+                                </View>
+                            </View>
+                        );
+                    })
+                )}
+            </TouchableOpacity>
+        );
+    };
+
+    const renderCashFlowWidget = () => {
+        const netIsPositive = cashFlow.net >= 0;
+        return (
+            <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Insights')}>
+                <View style={styles.widgetHeader}>
+                    <Text style={styles.widgetTitle}>Cash Flow</Text>
+                    <ChevronRight size={20} color="#3B82F6" />
+                </View>
+                <View style={styles.cashFlowRow}>
+                    <Text style={styles.cashFlowMonth}>{new Date().toLocaleString('default', { month: 'long' })}</Text>
+                    <Text style={[styles.cashFlowNet, netIsPositive ? styles.positive : styles.negative]}>
+                        {netIsPositive ? '+' : '-'}${Math.abs(cashFlow.net).toFixed(0)}
+                    </Text>
+                </View>
+                <View style={styles.cashFlowBars}>
+                    <View style={[styles.cashFlowBar, { backgroundColor: '#10B981', flex: cashFlow.income || 1 }]} />
+                    <View style={[styles.cashFlowBar, { backgroundColor: '#F97316', flex: cashFlow.expenses || 1 }]} />
+                </View>
+                <Text style={styles.projectedText}>Projected Balance of {netIsPositive ? '' : '-'}${Math.abs(cashFlow.net).toFixed(0)}</Text>
+            </TouchableOpacity>
+        );
+    };
+
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 100 }} />
+            </SafeAreaView>
+        );
+    }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="dark-content" />
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
-                refreshControl={
-                    <RefreshControl refreshing={loading} onRefresh={fetchDashboardData} />
-                }
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                showsVerticalScrollIndicator={false}
             >
-                {/* Header Section */}
+                {/* Header */}
                 <View style={styles.header}>
                     <View>
-                        <Text style={styles.welcomeText}>Good morning,</Text>
+                        <Text style={styles.greeting}>{getGreeting()},</Text>
                         <Text style={styles.userName}>Rahil</Text>
                     </View>
-                    <TouchableOpacity style={styles.profileButton}>
-                        <View style={styles.profilePlaceholder} />
+                    <TouchableOpacity style={styles.searchBtn} onPress={() => navigation.navigate('SearchScreen')}>
+                        <Search size={22} color="#0F172A" />
                     </TouchableOpacity>
                 </View>
 
-                {/* Balance Card */}
-                <View style={styles.balanceCard}>
-                    <Text style={styles.balanceLabel}>Total Balance</Text>
-                    {loading ? (
-                        <ActivityIndicator color="#FFF" style={{ alignSelf: 'flex-start', marginVertical: 10 }} />
-                    ) : (
-                        <Text style={styles.balanceAmount}>{(balance.total !== '$0.00' || loading) ? balance.total : '$0.00'}</Text>
-                    )}
-                    <View style={styles.balanceActions}>
-                        <View style={styles.statItem}>
-                            <View style={[styles.iconBg, { backgroundColor: '#E1F5FE' }]}>
-                                <ArrowDownLeft size={20} color="#0288D1" />
-                            </View>
-                            <Text style={styles.statLabel}>Income</Text>
-                            <Text style={styles.statValue}>{balance.income !== 'Calculating...' ? `+${balance.income}` : '...'}</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <View style={[styles.iconBg, { backgroundColor: '#FBE9E7' }]}>
-                                <ArrowUpRight size={20} color="#D84315" />
-                            </View>
-                            <Text style={styles.statLabel}>Expenses</Text>
-                            <Text style={styles.statValue}>{balance.expenses !== 'Calculating...' ? `-${balance.expenses}` : '...'}</Text>
-                        </View>
-                    </View>
-                </View>
+                {/* Widgets */}
+                {renderAccountsWidget()}
+                {renderBillsWidget()}
+                {renderTopExpensesWidget()}
+                {renderBudgetWidget()}
+                {renderCashFlowWidget()}
 
-                {/* Plaid Link Button */}
-                <PlaidLink onSuccess={handleSuccess} />
-
-                {/* Quick Actions */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Quick Actions</Text>
-                </View>
-                <View style={styles.quickActions}>
-                    <TouchableOpacity style={styles.actionItem}>
-                        <View style={[styles.actionIcon, { backgroundColor: '#6200EE' }]}>
-                            <Plus size={24} color="#FFF" />
-                        </View>
-                        <Text style={styles.actionText}>Add Bill</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionItem}>
-                        <View style={[styles.actionIcon, { backgroundColor: '#03DAC6' }]}>
-                            <CreditCard size={24} color="#000" />
-                        </View>
-                        <Text style={styles.actionText}>Cards</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionItem}>
-                        <View style={[styles.actionIcon, { backgroundColor: '#FF0266' }]}>
-                            <PieChart size={24} color="#FFF" />
-                        </View>
-                        <Text style={styles.actionText}>Budget</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Recent Transactions */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Recent Transactions</Text>
-                    <TouchableOpacity>
-                        <Text style={styles.seeAll}>See All</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {transactions.length === 0 ? (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyStateText}>
-                            {accessToken ? 'No recent transactions found.' : 'Connect your bank to see transactions.'}
-                        </Text>
-                    </View>
-                ) : (
-                    transactions.map((tx) => (
-                        <TouchableOpacity
-                            key={tx.id}
-                            style={styles.transactionItem}
-                            onPress={() => navigation.navigate('TransactionDetails', { transaction: tx })}
-                        >
-                            <View style={styles.txIcon}>
-                                <Wallet size={20} color="#666" />
-                            </View>
-                            <View style={styles.txInfo}>
-                                <Text style={styles.txTitle} numberOfLines={1}>{tx.title}</Text>
-                                <Text style={styles.txCategory}>{tx.category}</Text>
-                            </View>
-                            <View style={styles.txDetails}>
-                                <Text style={[styles.txAmount, tx.isIncome ? styles.income : styles.expense]}>
-                                    {tx.amount}
-                                </Text>
-                                <Text style={styles.txDate}>{tx.date}</Text>
-                            </View>
-                        </TouchableOpacity>
-                    ))
-                )}
+                <View style={{ height: 40 }} />
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FE',
+        backgroundColor: '#F0F9FF',
     },
     scrollContent: {
-        padding: 20,
+        padding: 16,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 20,
     },
-    welcomeText: {
+    greeting: {
         fontSize: 16,
-        color: '#666',
+        color: '#64748B',
     },
     userName: {
         fontSize: 24,
         fontWeight: '700',
-        color: '#1A1A1A',
+        color: '#0F172A',
     },
-    profilePlaceholder: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
-        backgroundColor: '#E0E0E0',
-    },
-    balanceCard: {
-        backgroundColor: '#1A1A1A',
-        borderRadius: 24,
-        padding: 24,
-        marginBottom: 24,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 10,
-    },
-    balanceLabel: {
-        color: '#AAA',
-        fontSize: 14,
-        marginBottom: 8,
-    },
-    balanceAmount: {
-        color: '#FFF',
-        fontSize: 36,
-        fontWeight: '800',
-        marginBottom: 24,
-    },
-    balanceActions: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        borderTopWidth: 1,
-        borderTopColor: '#333',
-        paddingTop: 20,
-    },
-    statItem: {
-        flexDirection: 'column',
-    },
-    iconBg: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    statLabel: {
-        color: '#AAA',
-        fontSize: 12,
-    },
-    statValue: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-        marginTop: 8,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1A1A1A',
-    },
-    seeAll: {
-        color: '#6200EE',
-        fontWeight: '600',
-    },
-    quickActions: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 24,
-    },
-    actionItem: {
-        alignItems: 'center',
-        width: '30%',
-    },
-    actionIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 18,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    actionText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#444',
-    },
-    transactionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    searchBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         backgroundColor: '#FFF',
-        padding: 16,
-        borderRadius: 20,
-        marginBottom: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
         elevation: 2,
     },
-    txIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 14,
-        backgroundColor: '#F0F0F0',
+    widgetCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOpacity: 0.03,
+        shadowRadius: 6,
+        elevation: 1,
+    },
+    widgetHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    widgetTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#0F172A',
+    },
+    widgetSubtitle: {
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '400',
+    },
+    // Accounts
+    accountsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    accountCol: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    accountDivider: {
+        width: 1,
+        height: 60,
+        backgroundColor: '#E2E8F0',
+    },
+    accountLabel: {
+        fontSize: 12,
+        color: '#64748B',
+        marginBottom: 8,
+    },
+    accountIconCircle: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 16,
+        marginBottom: 8,
     },
-    txInfo: {
-        flex: 1,
+    accountAmount: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#0F172A',
     },
-    txTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1A1A1A',
+    // Bills
+    billsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
     },
-    txCategory: {
+    billStat: {
+        alignItems: 'center',
+    },
+    billDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginBottom: 4,
+    },
+    billStatLabel: {
         fontSize: 12,
-        color: '#888',
-        marginTop: 2,
+        color: '#64748B',
     },
-    txDetails: {
-        alignItems: 'flex-end',
+    billStatValue: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#0F172A',
     },
-    txAmount: {
+    // Top Expenses
+    expensesRow: {
+        marginBottom: 8,
+    },
+    expenseItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    expenseIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+    },
+    expenseName: {
+        flex: 1,
+        fontSize: 14,
+        color: '#0F172A',
+    },
+    expenseAmount: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#0F172A',
+    },
+    totalText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#0F172A',
+        marginTop: 4,
+    },
+    // Budget
+    budgetItem: {
+        marginBottom: 16,
+    },
+    budgetHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    budgetIconCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        backgroundColor: '#DBEAFE',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+    },
+    budgetIconText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#3B82F6',
+    },
+    budgetName: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#0F172A',
+    },
+    budgetLimitAmount: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#0F172A',
+    },
+    budgetBarContainer: {
+        marginBottom: 4,
+    },
+    budgetBarBg: {
+        height: 24,
+        backgroundColor: '#E2E8F0',
+        borderRadius: 6,
+        overflow: 'hidden',
+    },
+    budgetBar: {
+        height: '100%',
+        borderRadius: 6,
+        justifyContent: 'center',
+        paddingHorizontal: 8,
+        minWidth: 100,
+    },
+    budgetBarText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#FFF',
+    },
+    budgetFooterRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    budgetPercent: {
+        fontSize: 12,
+        color: '#64748B',
+    },
+    budgetMonth: {
+        fontSize: 12,
+        color: '#64748B',
+    },
+    emptyText: {
+        fontSize: 13,
+        color: '#64748B',
+        textAlign: 'center',
+        paddingVertical: 10,
+    },
+    // Cash Flow
+    cashFlowRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    cashFlowMonth: {
+        fontSize: 14,
+        color: '#0F172A',
+    },
+    cashFlowNet: {
         fontSize: 16,
         fontWeight: '700',
     },
-    income: {
-        color: '#2E7D32',
+    positive: {
+        color: '#10B981',
     },
-    expense: {
-        color: '#D32F2F',
+    negative: {
+        color: '#EF4444',
     },
-    txDate: {
+    cashFlowBars: {
+        flexDirection: 'row',
+        height: 8,
+        borderRadius: 4,
+        overflow: 'hidden',
+        marginBottom: 8,
+    },
+    cashFlowBar: {
+        height: '100%',
+    },
+    projectedText: {
         fontSize: 12,
-        color: '#AAA',
-        marginTop: 2,
-    },
-    emptyState: {
-        padding: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    emptyStateText: {
-        color: '#888',
-        fontSize: 14,
+        color: '#64748B',
         textAlign: 'center',
     },
 });

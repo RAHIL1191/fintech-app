@@ -429,6 +429,16 @@ app.get('/api/transactions', async (req, res) => {
             combined = combined.filter(t => t.transaction_id === req.query.transaction_id);
         }
 
+        // OPTIONAL: Search filter
+        if (req.query.search && req.query.search.trim().length > 0) {
+            const searchLower = req.query.search.toLowerCase();
+            combined = combined.filter(t =>
+                (t.name && t.name.toLowerCase().includes(searchLower)) ||
+                (t.merchant_name && t.merchant_name.toLowerCase().includes(searchLower)) ||
+                (t.personal_finance_category?.primary && t.personal_finance_category.primary.toLowerCase().includes(searchLower))
+            );
+        }
+
         const finalTransactions = [];
 
         for (const t of combined) {
