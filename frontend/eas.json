@@ -15,10 +15,36 @@
       "android": {
         "buildType": "apk"
       },
+      "ios": {
+        "simulator": true
+      },
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "1"
       },
       "distribution": "internal"
+    },
+    "preview-device": {
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "1"
+      },
+      "distribution": "internal"
+    },
+    "altstore": {
+      "ios": {
+        "simulator": false,
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "1"
+      },
+      "distribution": "internal",
+      "credentialsSource": "local"
     },
     "production": {
       "autoIncrement": true
