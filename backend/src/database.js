@@ -90,6 +90,9 @@ class DatabaseManager {
         await addColumn('manual_transactions', 'manual_budget_id', 'TEXT');
         await addColumn('manual_transactions', 'exclude_from_budget', 'INTEGER', 0);
 
+        // Add authorized_date to cached_transactions for better date accuracy
+        await addColumn('cached_transactions', 'authorized_date', 'TEXT');
+
         // Categories migration
         await addColumn('categories', 'parent_category', 'TEXT');
 
@@ -151,6 +154,14 @@ class DatabaseManager {
                 icon TEXT,
                 color TEXT,
                 is_custom INTEGER DEFAULT 0
+            )`,
+            // Category Normalizations
+            `CREATE TABLE IF NOT EXISTS category_normalizations (
+                id ${this.isPostgres ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${this.isPostgres ? '' : 'AUTOINCREMENT'},
+                from_category TEXT UNIQUE NOT NULL,
+                to_category TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
             // Plaid Items
             `CREATE TABLE IF NOT EXISTS plaid_items (
@@ -847,13 +858,14 @@ class DatabaseManager {
             if (this.isPostgres) {
                 sql = `
                     INSERT INTO cached_transactions(
-                transaction_id, account_id, amount, date, name, merchant_name,
+                transaction_id, account_id, amount, date, authorized_date, name, merchant_name,
                 category, personal_finance_category, pending, iso_currency_code, item_id, updated_at
             )
-        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
                     ON CONFLICT(transaction_id) DO UPDATE SET
         amount = EXCLUDED.amount,
             date = EXCLUDED.date,
+            authorized_date = EXCLUDED.authorized_date,
             pending = EXCLUDED.pending,
             category = EXCLUDED.category,
             personal_finance_category = EXCLUDED.personal_finance_category,
@@ -862,13 +874,14 @@ class DatabaseManager {
             } else {
                 sql = `
                     INSERT INTO cached_transactions(
-                    transaction_id, account_id, amount, date, name, merchant_name,
+                    transaction_id, account_id, amount, date, authorized_date, name, merchant_name,
                     category, personal_finance_category, pending, iso_currency_code, item_id, updated_at
                 )
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(transaction_id) DO UPDATE SET
         amount = excluded.amount,
             date = excluded.date,
+            authorized_date = excluded.authorized_date,
             pending = excluded.pending,
             category = excluded.category,
             personal_finance_category = excluded.personal_finance_category,
@@ -880,6 +893,7 @@ class DatabaseManager {
                 tx.account_id,
                 tx.amount,
                 tx.date,
+                tx.authorized_date || null,
                 tx.name,
                 tx.merchant_name,
                 tx.category ? tx.category.join(',') : null,
@@ -923,6 +937,7 @@ class DatabaseManager {
             account_id: row.account_id,
             amount: row.amount,
             date: row.date,
+            authorized_date: row.authorized_date,
             name: row.name,
             merchant_name: row.merchant_name,
             category: row.category ? row.category.split(',') : [],
@@ -1111,6 +1126,46 @@ class DatabaseManager {
             return this.run(pgSql, [name]);
         }
         return this.run(sql, [name]);
+    }
+
+    // ==================== Category Normalizations ====================
+
+    async getCategoryNormalizations() {
+        const sql = 'SELECT * FROM category_normalizations ORDER BY from_category';
+        return this.all(sql);
+    }
+
+    async createCategoryNormalization(from_category, to_category) {
+        const sql = 'INSERT INTO category_normalizations (from_category, to_category) VALUES (?, ?)';
+        const pgSql = 'INSERT INTO category_normalizations (from_category, to_category) VALUES ($1, $2) RETURNING *';
+
+        if (this.isPostgres) {
+            const result = await this.all(pgSql, [from_category, to_category]);
+            return result[0];
+        }
+        const result = await this.run(sql, [from_category, to_category]);
+        return { id: result.lastID, from_category, to_category };
+    }
+
+    async updateCategoryNormalization(id, from_category, to_category) {
+        const sql = 'UPDATE category_normalizations SET from_category = ?, to_category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+        const pgSql = 'UPDATE category_normalizations SET from_category = $1, to_category = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *';
+
+        if (this.isPostgres) {
+            const result = await this.all(pgSql, [from_category, to_category, id]);
+            return result[0];
+        }
+        await this.run(sql, [from_category, to_category, id]);
+        return { id, from_category, to_category };
+    }
+
+    async deleteCategoryNormalization(id) {
+        const sql = 'DELETE FROM category_normalizations WHERE id = ?';
+        const pgSql = 'DELETE FROM category_normalizations WHERE id = $1';
+        if (this.isPostgres) {
+            return this.run(pgSql, [id]);
+        }
+        return this.run(sql, [id]);
     }
 
     async getPaidBills() {

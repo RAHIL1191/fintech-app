@@ -2,7 +2,7 @@ export const CATEGORY_TAXONOMY = {
     "Food & Drink": {
         icon: "coffee",
         color: "#F59E0B", // Amber
-        subcategories: ["Groceries", "Restaurants", "Coffee", "Alcohol", "Fast Food", "Snacks", "Grocery", "FOOD_AND_DRINK"]
+        subcategories: ["Groceries", "Restaurants", "Coffee", "Alcohol", "Fast Food", "Snacks", "FOOD_AND_DRINK"]
     },
     "Shopping": {
         icon: "shopping-bag",
@@ -98,6 +98,63 @@ export const getCategoryColor = (category, taxonomy = CATEGORY_TAXONOMY) => {
     return taxonomy[parent]?.color || "#64748B";
 };
 
+// Store for dynamic normalizations loaded from backend
+let cachedNormalizations = {};
+let normalizationsLoaded = false;
+
+// Load normalization rules from backend
+export const loadNormalizations = async (api) => {
+    try {
+        const res = await api.get('/category-normalizations');
+        cachedNormalizations = (res.data.normalizations || []).reduce((acc, rule) => {
+            acc[rule.from_category] = rule.to_category;
+            return acc;
+        }, {});
+        normalizationsLoaded = true;
+    } catch (err) {
+        console.error('Failed to load normalizations:', err);
+    }
+};
+
+// Helper to normalize category names (uses dynamic rules from backend)
+export const normalizeCategory = (category) => {
+    if (!category) return category;
+
+    // 1. Check dynamic rules from backend (priority)
+    if (normalizationsLoaded && cachedNormalizations[category]) {
+        return cachedNormalizations[category];
+    }
+
+    // 2. Fallback patterns for unconfigured cases
+    const plaidPatterns = [
+        { pattern: /^Food And Drink Other.*$/i, replacement: 'Other Food & Drink' },
+        { pattern: /^General Merchandise.*$/i, replacement: 'Shopping' },
+    ];
+
+    for (const { pattern, replacement } of plaidPatterns) {
+        if (pattern.test(category)) {
+            return replacement;
+        }
+    }
+
+    return category;
+};
+
+// Helper to deduplicate a list of category names (removes duplicates after normalization)
+export const deduplicateCategories = (categories) => {
+    if (!Array.isArray(categories)) return categories;
+
+    const seen = new Set();
+    return categories.filter(cat => {
+        const normalized = normalizeCategory(cat);
+        if (seen.has(normalized)) {
+            return false;
+        }
+        seen.add(normalized);
+        return true;
+    });
+};
+
 // Helper to get icon for a category
 export const getCategoryIcon = (category, taxonomy = CATEGORY_TAXONOMY) => {
     const parent = getParentCategory(category, taxonomy);
@@ -107,17 +164,22 @@ export const getCategoryIcon = (category, taxonomy = CATEGORY_TAXONOMY) => {
 // Helper to check if a transaction category matches a budget category
 export const isCategoryMatch = (txCategory, budgetCategory) => {
     if (!txCategory || !budgetCategory) return false;
-    const txCat = txCategory.toLowerCase();
-    const bdCat = budgetCategory.toLowerCase();
 
-    // 1. Direct Match
+    // Normalize both categories first to handle variants like "Grocery" → "Groceries"
+    const normalizedTx = normalizeCategory(txCategory);
+    const normalizedBudget = normalizeCategory(budgetCategory);
+
+    const txCat = normalizedTx.toLowerCase();
+    const bdCat = normalizedBudget.toLowerCase();
+
+    // 1. Direct Match (after normalization)
     if (txCat === bdCat) return true;
 
     // 2. Parent Match: If budgetCategory is a Parent, check if txCategory is one of its children
     const taxonomyKey = Object.keys(CATEGORY_TAXONOMY).find(k => k.toLowerCase() === bdCat);
     if (taxonomyKey) {
         const subCategories = CATEGORY_TAXONOMY[taxonomyKey].subcategories;
-        if (subCategories.some(sub => sub.toLowerCase() === txCat)) return true;
+        if (subCategories.some(sub => normalizeCategory(sub).toLowerCase() === txCat)) return true;
     }
 
     // 3. Sub-category Partial Match (Reverse of above, or handling complex Plaid strings)

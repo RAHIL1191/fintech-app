@@ -55,7 +55,7 @@ const SearchModal = ({ visible, onClose, navigation }) => {
                 </View>
                 <View style={styles.resultContent}>
                     <Text style={styles.resultName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.resultDate}>{item.date}</Text>
+                    <Text style={styles.resultDate}>{item.authorized_date || item.date}</Text>
                 </View>
                 <Text style={[styles.resultAmount, isIncome ? styles.income : styles.expense]}>
                     {isIncome ? '+' : '-'}${Math.abs(item.amount).toFixed(2)}

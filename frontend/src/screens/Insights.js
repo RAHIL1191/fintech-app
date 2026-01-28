@@ -2,11 +2,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Modal, TextInput, Platform, Switch, SectionList, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomDatePicker from '../components/CustomDatePicker';
-import { ChevronLeft, ChevronRight, MoreHorizontal, Plus, Briefcase, Wallet, SlidersHorizontal, X, ShoppingBag, Coffee, Home, CreditCard, DollarSign, ArrowRightLeft, Check, Landmark } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, MoreHorizontal, Plus, Briefcase, Wallet, SlidersHorizontal, X, ShoppingBag, Coffee, Home, CreditCard, DollarSign, ArrowRightLeft, Check, Landmark, Settings } from 'lucide-react-native';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import api from '../config/api';
 import DonutChart from '../components/DonutChart';
-import { CATEGORY_TAXONOMY, getParentCategory, getCategoryColor, getCategoryIcon } from '../constants/CategoryTaxonomy';
+import { CATEGORY_TAXONOMY, getParentCategory, getCategoryColor, getCategoryIcon, normalizeCategory } from '../constants/CategoryTaxonomy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TransactionFilterModal from '../components/TransactionFilterModal';
 
@@ -977,9 +977,9 @@ const Insights = () => {
             return matchesType && matchesCategory && matchesAccount && matchesDate && matchesAmount && matchesNote;
         });
 
-        // Grouping for SectionList
+        // Grouping for SectionList (use authorized_date when available)
         const sectionsMap = filtered.reduce((acc, t) => {
-            const dateStr = t.date;
+            const dateStr = t.authorized_date || t.date; // Prefer authorization date
             if (!acc[dateStr]) {
                 acc[dateStr] = { title: dateStr, data: [], total: 0 };
             }
@@ -1085,12 +1085,12 @@ const Insights = () => {
             } else if (spendingFilter === 'Income') {
                 // Group by specific subcategory for Income
                 if (t.category && t.category.length > 0) {
-                    key = t.category[t.category.length - 1];
+                    key = normalizeCategory(t.category[t.category.length - 1]);
                 } else {
-                    key = t.personal_finance_category?.primary || 'Income';
+                    key = normalizeCategory(t.personal_finance_category?.primary || 'Income');
                 }
             } else {
-                key = getParentCategory(t.personal_finance_category?.primary || t.category?.[0] || 'Uncategorized', mergedTaxonomy);
+                key = getParentCategory(normalizeCategory(t.personal_finance_category?.primary || t.category?.[0] || 'Uncategorized'), mergedTaxonomy);
             }
 
             if (!acc[key]) {
@@ -1180,8 +1180,8 @@ const Insights = () => {
                                     <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: item.color }} />
                                 </View>
                                 <View style={{ flex: 1, marginHorizontal: 12 }}>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                        <Text style={styles.spendingName} numberOfLines={1}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                        <Text style={[styles.spendingName, { flex: 1, marginRight: 8, paddingTop: 1 }]} numberOfLines={1}>
                                             {spendingFilter === 'Merchant' ? item.name.split(' ').slice(0, 3).join(' ') : item.name}
                                         </Text>
                                         <Text style={styles.spendingAmount}>${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
@@ -1229,7 +1229,8 @@ const Insights = () => {
                                     // Category Drill Down Logic
                                     if (spendingFilter === 'Category' && !selectedSubcategory) {
                                         const subGroups = drillDownGroup.transactions.reduce((acc, t) => {
-                                            const subName = (t.category && t.category.length > 0) ? t.category[t.category.length - 1] : 'Uncategorized';
+                                            const rawSubName = (t.category && t.category.length > 0) ? t.category[t.category.length - 1] : 'Uncategorized';
+                                            const subName = normalizeCategory(rawSubName);
                                             if (!acc[subName]) acc[subName] = { name: subName, amount: 0, transactions: [] };
                                             acc[subName].amount += Math.abs(t.amount);
                                             acc[subName].transactions.push(t);
@@ -1265,10 +1266,12 @@ const Insights = () => {
                                                             {getIconForCategory(item.name, item.color)}
                                                         </View>
                                                         <View style={{ flex: 1, marginHorizontal: 12 }}>
-                                                            <Text style={styles.spendingName}>{item.name}</Text>
-                                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                                                <Text style={styles.spendingPct}>{((item.amount / subTotal) * 100).toFixed(1)} %</Text>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                                <Text style={[styles.spendingName, { flex: 1, marginRight: 8, paddingTop: 1 }]} numberOfLines={1}>{item.name}</Text>
                                                                 <Text style={styles.spendingAmount}>${item.amount.toFixed(2)}</Text>
+                                                            </View>
+                                                            <View style={{ flexDirection: 'row', justifyContent: 'flex-start' }}>
+                                                                <Text style={styles.spendingPct}>{((item.amount / subTotal) * 100).toFixed(1)} %</Text>
                                                             </View>
                                                         </View>
                                                     </TouchableOpacity>
@@ -1586,6 +1589,9 @@ const Insights = () => {
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Insights</Text>
                 <View style={styles.headerRight}>
+                    <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.navigate('CategoryNormalizations')}>
+                        <Settings color="#3B82F6" size={24} />
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.headerIcon} onPress={() => {
                         if (activeTab === 'Transactions') {
                             setTransactionFilterModalVisible(true);
@@ -3062,11 +3068,15 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 15,
         fontWeight: '600',
+        lineHeight: 20,
+        includeFontPadding: false,
     },
     spendingAmount: {
         color: '#FFF',
         fontSize: 15,
         fontWeight: '700',
+        lineHeight: 20,
+        includeFontPadding: false,
     },
     spendingPct: {
         color: '#94A3B8',

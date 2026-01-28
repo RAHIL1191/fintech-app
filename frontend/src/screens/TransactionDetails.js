@@ -132,7 +132,7 @@ const TransactionDetails = () => {
                         {transaction.isIncome ? '+' : '-'}{formatCurrency(Math.abs(parseFloat(transaction.amount)))}
                     </Text>
                     <Text style={styles.heroMeta}>
-                        {transaction.isIncome ? 'Income' : 'Expense'} | {formatHeroDate(transaction.date, transaction.time)}
+                        {transaction.isIncome ? 'Income' : 'Expense'} | {formatHeroDate(transaction.authorized_date || transaction.date, transaction.time)}
                     </Text>
                 </View>
 

@@ -102,6 +102,59 @@ app.delete('/api/categories/:name', async (req, res) => {
     }
 });
 
+// ==================== Category Normalizations ====================
+
+// Get all normalization rules
+app.get('/api/category-normalizations', async (req, res) => {
+    try {
+        const normalizations = await db.getCategoryNormalizations();
+        res.json({ normalizations });
+    } catch (error) {
+        console.error('Error fetching normalizations:', error);
+        res.status(500).json({ error: 'Failed to fetch normalizations' });
+    }
+});
+
+// Create a new normalization rule
+app.post('/api/category-normalizations', async (req, res) => {
+    try {
+        const { from_category, to_category } = req.body;
+        if (!from_category || !to_category) {
+            return res.status(400).json({ error: 'from_category and to_category are required' });
+        }
+        const normalization = await db.createCategoryNormalization(from_category, to_category);
+        res.json(normalization);
+    } catch (error) {
+        console.error('Error creating normalization:', error);
+        res.status(500).json({ error: 'Failed to create normalization' });
+    }
+});
+
+// Update a normalization rule
+app.put('/api/category-normalizations/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { from_category, to_category } = req.body;
+        const normalization = await db.updateCategoryNormalization(id, from_category, to_category);
+        res.json(normalization);
+    } catch (error) {
+        console.error('Error updating normalization:', error);
+        res.status(500).json({ error: 'Failed to update normalization' });
+    }
+});
+
+// Delete a normalization rule
+app.delete('/api/category-normalizations/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.deleteCategoryNormalization(id);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting normalization:', error);
+        res.status(500).json({ error: 'Failed to delete normalization' });
+    }
+});
+
 // Duplicate route removed
 
 
@@ -261,6 +314,23 @@ app.get('/api/transactions', async (req, res) => {
                     });
                     const transactions = response.data.transactions;
 
+                    // Debug: Show which transactions have authorized_date
+                    const withAuthDate = transactions.filter(t => t.authorized_date).length;
+                    console.log(`\n--- Plaid Sync Results ---`);
+                    console.log(`Total: ${transactions.length} transactions, ${withAuthDate} have authorized_date\n`);
+
+                    // Show transactions from mid-January to help find the gas transaction
+                    const janTransactions = transactions.filter(t =>
+                        t.date >= '2026-01-15' && t.date <= '2026-01-20'
+                    );
+                    if (janTransactions.length > 0) {
+                        console.log('Transactions from Jan 15-20:');
+                        janTransactions.forEach(t => {
+                            console.log(`  ${t.date} ${t.authorized_date ? `(auth: ${t.authorized_date})` : '(NO AUTH DATE)'} - ${t.name.substring(0, 40)} - $${t.amount}`);
+                        });
+                        console.log('');
+                    }
+
                     // Update cache
                     await db.upsertTransactions(transactions, item.item_id);
 
@@ -374,6 +444,7 @@ app.get('/api/transactions', async (req, res) => {
                 name: txOverride.merchant_name || t.name,
                 account_id: txOverride.account_id || t.account_id,
                 date: txOverride.date || t.date,
+                authorized_date: t.authorized_date,
                 time: txOverride.time || null,
                 note: txOverride.note || t.note,
                 recurring_frequency: txOverride.recurring_frequency || t.recurring_frequency,

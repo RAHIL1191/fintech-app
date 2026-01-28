@@ -28,6 +28,8 @@ import CreateBudget from './src/screens/CreateBudget';
 import BudgetDetails from './src/screens/BudgetDetails';
 import MoveBudgetAmount from './src/screens/MoveBudgetAmount';
 import SearchScreen from './src/screens/SearchScreen';
+import CategoryNormalizations from './src/screens/CategoryNormalizations';
+import { loadNormalizations } from './src/constants/CategoryTaxonomy';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -141,6 +143,11 @@ const MainTabs = () => {
 };
 
 export default function App() {
+    // Load category normalizations on app start
+    React.useEffect(() => {
+        loadNormalizations(api);
+    }, []);
+
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <SafeAreaProvider>
@@ -162,6 +169,7 @@ export default function App() {
                         <RootStack.Screen name="CashFlow" component={CashFlow} />
                         <RootStack.Screen name="AccountTransactions" component={AccountTransactions} />
                         <RootStack.Screen name="SearchScreen" component={SearchScreen} />
+                        <RootStack.Screen name="CategoryNormalizations" component={CategoryNormalizations} />
                     </RootStack.Navigator>
                 </NavigationContainer>
             </SafeAreaProvider>

@@ -2,6 +2,66 @@ const express = require('express');
 const router = express.Router();
 const { manager, cleanMerchantName } = require('../database');
 
+// Cache for category normalizations
+let categoryNormalizations = null;
+let lastNormalizationsLoad = null;
+const NORMALIZATION_CACHE_DURATION = 60000; // 1 minute
+
+// Load category normalizations from database
+async function loadNormalizations() {
+    try {
+        const now = Date.now();
+        // Only reload if cache is empty or expired
+        if (!categoryNormalizations || !lastNormalizationsLoad || (now - lastNormalizationsLoad) > NORMALIZATION_CACHE_DURATION) {
+            const rules = await manager.getCategoryNormalizations();
+            categoryNormalizations = rules.reduce((acc, rule) => {
+                acc[rule.from_category.toLowerCase()] = rule.to_category;
+                return acc;
+            }, {});
+            lastNormalizationsLoad = now;
+        }
+        return categoryNormalizations;
+    } catch (error) {
+        console.error('Error loading category normalizations:', error);
+        return {};
+    }
+}
+
+// Normalize category name using loaded rules
+function normalizeCategory(category) {
+    if (!category) return 'Uncategorized';
+
+    const normalized = category.trim();
+    const lowerNormalized = normalized.toLowerCase();
+
+    // Use loaded normalizations if available
+    if (categoryNormalizations && categoryNormalizations[lowerNormalized]) {
+        return categoryNormalizations[lowerNormalized];
+    }
+
+    // Fallback: Pattern-based normalization for verbose Plaid names
+    // e.g. "Food And Drink Restaurant" -> "Restaurants"
+    const patterns = [
+        { regex: /^food\s+and\s+drink\s+restaurant/i, result: 'Restaurants' },
+        { regex: /^food\s+and\s+drink\s+coffee/i, result: 'Coffee' },
+        { regex: /^food\s+and\s+drink/i, result: 'Food & Drink' },
+        { regex: /^shops\s+-\s+/i, result: (match) => match.replace(/^shops\s+-\s+/i, '') },
+        { regex: /^general\s+merchandise/i, result: 'Shopping' },
+        { regex: /^travel/i, result: 'Entertainment' },
+    ];
+
+    for (const pattern of patterns) {
+        if (pattern.regex.test(normalized)) {
+            if (typeof pattern.result === 'function') {
+                return pattern.result(normalized);
+            }
+            return pattern.result;
+        }
+    }
+
+    return normalized;
+}
+
 // Simple Taxonomy Map for Backend (Needs to match frontend constants/CategoryTaxonomy.js)
 const CATEGORY_TAXONOMY = {
     "Food & Drink": ["Groceries", "Restaurants", "Coffee", "Alcohol", "Fast Food", "Snacks", "Grocery", "FOOD_AND_DRINK"],
@@ -21,10 +81,12 @@ const CATEGORY_TAXONOMY = {
 // Helper: Check if txCategory belongs to budgetCategory (Direct match or Child of Parent)
 const isCategoryMatch = (txCategory, budgetCategory) => {
     if (!txCategory || !budgetCategory) return false;
-    const txCat = txCategory.toLowerCase();
-    const bdCat = budgetCategory.toLowerCase();
 
-    // 1. Direct Match
+    // Normalize both categories before comparison
+    const txCat = normalizeCategory(txCategory).toLowerCase();
+    const bdCat = normalizeCategory(budgetCategory).toLowerCase();
+
+    // 1. Direct Match (after normalization)
     if (txCat === bdCat) return true;
 
     // 2. Parent Match: If budgetCategory is a Parent, check if txCategory is one of its children
@@ -32,7 +94,7 @@ const isCategoryMatch = (txCategory, budgetCategory) => {
     const taxonomyKey = Object.keys(CATEGORY_TAXONOMY).find(k => k.toLowerCase() === bdCat);
     if (taxonomyKey) {
         const subCategories = CATEGORY_TAXONOMY[taxonomyKey];
-        if (subCategories.some(sub => sub.toLowerCase() === txCat)) return true;
+        if (subCategories.some(sub => normalizeCategory(sub).toLowerCase() === txCat)) return true;
     }
 
     // 3. Reverse: If budgetCategory is a Sub, it only matches that specific Sub (already covered by Direct Match)
@@ -48,6 +110,9 @@ const isCategoryMatch = (txCategory, budgetCategory) => {
 // GET /api/budgets
 router.get('/', async (req, res) => {
     try {
+        // Load category normalizations
+        await loadNormalizations();
+
         const queryDate = req.query.date ? new Date(req.query.date) : new Date();
         const year = queryDate.getFullYear();
         const month = queryDate.getMonth();
@@ -227,6 +292,9 @@ router.post('/', async (req, res) => {
 // Returns budgets with "spent" amount calculated for the current month
 router.get('/summary', async (req, res) => {
     try {
+        // Load category normalizations
+        await loadNormalizations();
+
         // 1. Prepare Date Range
         const { month, year } = req.query;
         let startOfMonth, endOfMonth;
@@ -307,8 +375,18 @@ router.get('/summary', async (req, res) => {
                 merchantRules[cleanedName] || {};
 
             // Resolve Category
-            const pfDetailed = t.personal_finance_category?.detailed?.replace(/_/g, ' ')?.toLowerCase()?.replace(/\b\w/g, l => l.toUpperCase());
-            const pfPrimary = t.personal_finance_category?.primary?.replace(/_/g, ' ')?.toLowerCase()?.replace(/\b\w/g, l => l.toUpperCase());
+            // Parse personal_finance_category if it's a JSON string
+            let pfcObj = t.personal_finance_category;
+            if (typeof pfcObj === 'string') {
+                try {
+                    pfcObj = JSON.parse(pfcObj);
+                } catch (e) {
+                    pfcObj = { primary: pfcObj };
+                }
+            }
+
+            const pfDetailed = pfcObj?.detailed?.replace(/_/g, ' ')?.toLowerCase()?.replace(/\b\w/g, l => l.toUpperCase());
+            const pfPrimary = pfcObj?.primary?.replace(/_/g, ' ')?.toLowerCase()?.replace(/\b\w/g, l => l.toUpperCase());
             const legacyCategory = t.category && t.category.length > 0 ? t.category[0] : null;
 
             const pfCategory = pfDetailed || pfPrimary || legacyCategory || 'General';
@@ -433,6 +511,9 @@ router.get('/:id', async (req, res) => {
     const { month, year } = req.query; // optional, defaults to current
 
     try {
+        // Load category normalizations
+        await loadNormalizations();
+
         const budget = await manager.get('SELECT * FROM budgets WHERE id = ?', [id]);
         if (!budget) {
             return res.status(404).json({ error: 'Budget not found' });
@@ -484,8 +565,19 @@ router.get('/:id', async (req, res) => {
                 merchantRules[cleanedName] || {};
 
             // Resolve Category
-            const pfDetailed = t.personal_finance_category?.detailed?.replace(/_/g, ' ')?.toLowerCase()?.replace(/\b\w/g, l => l.toUpperCase());
-            const pfPrimary = t.personal_finance_category?.primary?.replace(/_/g, ' ')?.toLowerCase()?.replace(/\b\w/g, l => l.toUpperCase());
+            // Parse personal_finance_category if it's a JSON string
+            let pfcObj = t.personal_finance_category;
+            if (typeof pfcObj === 'string') {
+                try {
+                    pfcObj = JSON.parse(pfcObj);
+                } catch (e) {
+                    // If it's not JSON, treat it as a simple string category
+                    pfcObj = { primary: pfcObj };
+                }
+            }
+
+            const pfDetailed = pfcObj?.detailed?.replace(/_/g, ' ')?.toLowerCase()?.replace(/\b\w/g, l => l.toUpperCase());
+            const pfPrimary = pfcObj?.primary?.replace(/_/g, ' ')?.toLowerCase()?.replace(/\b\w/g, l => l.toUpperCase());
             const legacyCategory = t.category && t.category.length > 0 ? t.category[0] : null;
 
             const pfCategory = pfDetailed || pfPrimary || legacyCategory || 'General';

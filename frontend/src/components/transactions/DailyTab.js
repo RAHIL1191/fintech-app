@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, SectionList } from 'react-native';
 import { ShoppingBag, Coffee, Home, CreditCard, DollarSign, RefreshCw, ArrowRightLeft, Plus } from 'lucide-react-native';
 
@@ -26,9 +26,9 @@ const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
             return true;
         });
 
-        // 2. Group by Date (YYYY-MM-DD)
+        // 2. Group by Date (use authorized_date when available, fallback to posted date)
         const groups = filtered.reduce((acc, t) => {
-            const dateStr = t.date; // YYYY-MM-DD
+            const dateStr = t.authorized_date || t.date; // YYYY-MM-DD - prefer authorization date
             if (!acc[dateStr]) {
                 acc[dateStr] = { date: dateStr, transactions: [], total: 0 };
             }
@@ -94,6 +94,38 @@ const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
         return '#64748B'; // Slate
     };
 
+    // Memoize the render function for better performance
+    const renderTransactionItem = useCallback(({ item }) => (
+        <TouchableOpacity
+            style={styles.card}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('TransactionDetails', { transaction: item })}
+        >
+            <View style={styles.cardLeft}>
+                <View style={[styles.cardIcon, { backgroundColor: getIconColor(item.personal_finance_category?.primary) }]}>
+                    {getIconForCategory(item.personal_finance_category?.primary)}
+                </View>
+                <View style={styles.cardInfo}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.cardSubtitle} numberOfLines={1}>
+                        {item.personal_finance_category?.primary || 'General'}
+                        {item.time ? ` • ${formatTime(item.time)}` : ''}
+                    </Text>
+                </View>
+            </View>
+            <Text style={[
+                styles.cardAmount,
+                { color: item.amount > 0 ? '#FFF' : '#10B981' }
+            ]}>
+                {item.amount > 0 ? '-' : '+'}${Math.abs(item.amount).toFixed(2)}
+            </Text>
+            <View style={[
+                styles.cardAccentBar,
+                { backgroundColor: item.amount > 0 ? '#F59E0B' : '#10B981' }
+            ]} />
+        </TouchableOpacity>
+    ), [navigation]);
+
     return (
         <View style={styles.container}>
             {/* Filter Pills */}
@@ -143,38 +175,15 @@ const DailyTab = ({ transactions = [], navigation, onRefresh, refreshing }) => {
                             </Text>
                         </View>
                     )}
-                    renderItem={({ item }) => (
-                        <TouchableOpacity
-                            style={styles.card}
-                            activeOpacity={0.8}
-                            onPress={() => navigation.navigate('TransactionDetails', { transaction: item })}
-                        >
-                            <View style={styles.cardLeft}>
-                                <View style={[styles.cardIcon, { backgroundColor: getIconColor(item.personal_finance_category?.primary) }]}>
-                                    {getIconForCategory(item.personal_finance_category?.primary)}
-                                </View>
-                                <View style={styles.cardInfo}>
-                                    <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
-                                    <Text style={styles.cardSubtitle} numberOfLines={1}>
-                                        {item.personal_finance_category?.primary || 'General'}
-                                        {item.time ? ` • ${formatTime(item.time)}` : ''}
-                                    </Text>
-                                </View>
-                            </View>
-                            <Text style={[
-                                styles.cardAmount,
-                                { color: item.amount > 0 ? '#FFF' : '#10B981' }
-                            ]}>
-                                {item.amount > 0 ? '-' : '+'}${Math.abs(item.amount).toFixed(2)}
-                            </Text>
-                            <View style={[
-                                styles.cardAccentBar,
-                                { backgroundColor: item.amount > 0 ? '#F59E0B' : '#10B981' }
-                            ]} />
-                        </TouchableOpacity>
-                    )}
+                    renderItem={renderTransactionItem}
                     ListFooterComponent={<View style={{ height: 100 }} />}
                     stickySectionHeadersEnabled={false}
+                    // Performance optimizations
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    updateCellsBatchingPeriod={50}
+                    windowSize={21}
+                    removeClippedSubviews={true}
                 />
             ) : (
                 <ScrollView
