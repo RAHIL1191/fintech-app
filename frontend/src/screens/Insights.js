@@ -9,6 +9,7 @@ import DonutChart from '../components/DonutChart';
 import { CATEGORY_TAXONOMY, getParentCategory, getCategoryColor, getCategoryIcon, normalizeCategory } from '../constants/CategoryTaxonomy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TransactionFilterModal from '../components/TransactionFilterModal';
+import TransactionCard from '../components/TransactionCard';
 
 const Insights = () => {
     const navigation = useNavigation();
@@ -3145,48 +3146,7 @@ const styles = StyleSheet.create({
 });
 
 // Memoized Card Component to prevent re-renders
-const TransactionCard = React.memo(({ t, getIconColor, getIconForCategory, getTransactionDisplayName, formatCategory, getAccountIcon, navigation }) => (
-    <TouchableOpacity
-        style={styles.card}
-        onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
-    >
-        <View style={styles.cardLeft}>
-            <View style={[styles.cardIcon, { backgroundColor: getIconColor(t.personal_finance_category?.primary) }]}>
-                {getIconForCategory(t.personal_finance_category?.primary)}
-            </View>
-            <View style={styles.cardInfo}>
-                <Text style={styles.cardTitle}>{getTransactionDisplayName(t)}</Text>
-                <Text style={styles.cardSubtitle}>
-                    {new Date(t.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{t.updated_at ? `, ${new Date(t.updated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''} • {formatCategory(t.personal_finance_category?.primary || t.category?.[0])}
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
-                    {getAccountIcon(t.account_type)}
-                    <Text style={{ color: '#94A3B8', fontSize: 12 }}>
-                        {[
-                            t.account_owner_name,
-                            t.institution_name?.split(' ')[0],
-                            t.account_subtype === 'credit card' ? 'CC' :
-                                t.account_subtype === 'checking' ? 'Chequing' :
-                                    t.account_subtype === 'savings' ? 'Savings' :
-                                        t.account_subtype === 'mortgage' ? 'Mortgage' :
-                                            t.account_subtype || t.account_type || 'Cash'
-                        ].filter(Boolean).join(' · ')}
-                    </Text>
-                </View>
-            </View>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-            <Text style={[styles.cardAmount, { color: t.amount < 0 ? '#10B981' : '#EF4444' }]}>
-                {t.amount < 0 ? '+' : ''}${Math.abs(t.amount).toFixed(2)}
-            </Text>
-            {new Date(t.date) > new Date() && (
-                <View style={{ backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4 }}>
-                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>Future</Text>
-                </View>
-            )}
-        </View>
-    </TouchableOpacity>
-));
+// TransactionCard imported from ../components/TransactionCard
 
 export default Insights;
 // Force Rebuild

@@ -2,9 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, SectionList, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, ShoppingBag, Coffee, Home, CreditCard, DollarSign, ArrowRightLeft } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import TransactionCard from './TransactionCard';
 
 const BudgetTransactionsModal = ({ visible, onClose, transactions = [], budgetName }) => {
     const insets = useSafeAreaInsets();
+    const navigation = useNavigation();
 
     // --- Helpers reused from DailyTab ---
     const getIconForCategory = (category) => {
@@ -27,20 +30,7 @@ const BudgetTransactionsModal = ({ visible, onClose, transactions = [], budgetNa
         return '#64748B'; // Slate
     };
 
-    const formatTime = (timeStr) => {
-        if (!timeStr) return '';
-        try {
-            let [hours, minutes] = timeStr.split(':').map(Number);
-            const ampm = hours >= 12 ? 'p.m.' : 'a.m.';
-            hours = hours % 12;
-            hours = hours ? hours : 12;
-            const minutesStr = minutes < 10 ? '0' + minutes : minutes;
-            return `${hours}:${minutesStr} ${ampm}`;
-        } catch (e) {
-            return timeStr;
-        }
-    };
-
+    // ... formatTime and formatDateHeader ... (keep them if needed for helper but formatDateHeader is used in SectionHeader)
     const formatDateHeader = (dateStr) => {
         const date = new Date(dateStr + 'T12:00:00');
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -109,23 +99,13 @@ const BudgetTransactionsModal = ({ visible, onClose, transactions = [], budgetNa
                             </View>
                         )}
                         renderItem={({ item }) => (
-                            <View style={styles.card}>
-                                <View style={styles.cardLeft}>
-                                    <View style={[styles.cardIcon, { backgroundColor: getIconColor(item.personal_finance_category?.primary || item.category) }]}>
-                                        {getIconForCategory(item.personal_finance_category?.primary || item.category)}
-                                    </View>
-                                    <View style={styles.cardInfo}>
-                                        <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
-                                        <Text style={styles.cardSubtitle} numberOfLines={1}>
-                                            {item.merchant_name || 'Unknown Merchant'}
-                                            {item.time ? ` • ${formatTime(item.time)}` : ''}
-                                        </Text>
-                                    </View>
-                                </View>
-                                <Text style={styles.cardAmount}>
-                                    ${Math.abs(item.amount).toFixed(2)}
-                                </Text>
-                            </View>
+                            <TransactionCard
+                                t={item}
+                                navigation={navigation}
+                                getIconColor={getIconColor}
+                                getIconForCategory={getIconForCategory}
+                                theme="light"
+                            />
                         )}
                     />
                 )}

@@ -662,7 +662,9 @@ router.get('/:id', async (req, res) => {
             return true;
         });
 
-        const spent = relevantTxs.reduce((sum, tx) => sum + (tx.amount > 0 ? tx.amount : 0), 0);
+        // Filter for expenses only (amount > 0)
+        const expenseTxs = relevantTxs.filter(tx => tx.amount > 0);
+        const spent = expenseTxs.reduce((sum, tx) => sum + tx.amount, 0);
 
         const result = {
             ...budget,
@@ -671,7 +673,7 @@ router.get('/:id', async (req, res) => {
             spent: spent,
             limit: budget.amount,
             period: new Date(targetYear, targetMonth - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' }),
-            transactions: relevantTxs
+            transactions: expenseTxs
         };
 
         res.json(result);
