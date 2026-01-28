@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, ChevronRight, Wallet, CreditCard, AlertCircle } from 'lucide-react-native';
+import { Search, ChevronRight, Wallet, CreditCard, AlertCircle, Bell } from 'lucide-react-native';
 import api from '../config/api';
+import AlertsModal from '../components/AlertsModal';
 import { getCategoryIcon, getCategoryColor } from '../constants/CategoryTaxonomy';
 import * as LucideIcons from 'lucide-react-native';
 
@@ -30,6 +31,11 @@ const Dashboard = () => {
     const [cashFlow, setCashFlow] = useState({ income: 0, expenses: 0, net: 0 });
     const [prevMonthExpenses, setPrevMonthExpenses] = useState(0);
     const [currentMonthExpensesTotal, setCurrentMonthExpensesTotal] = useState(0);
+
+    // Notifications State
+    const [notifications, setNotifications] = useState([]);
+    const [isAlertsVisible, setIsAlertsVisible] = useState(false);
+    const unreadCount = notifications.filter(n => !n.read).length;
 
     const fetchDashboardData = async () => {
         try {
@@ -90,6 +96,12 @@ const Dashboard = () => {
             const income = transactions.filter(t => t.date && t.date.startsWith(thisMonthStr) && t.amount < 0 && !t.is_transfer).reduce((s, t) => s + Math.abs(t.amount), 0);
             const expenses = monthlyExpenses.reduce((s, t) => s + t.amount, 0);
             setCashFlow({ income, expenses, net: income - expenses });
+
+            // Fetch Notifications
+            try {
+                const notifRes = await api.get('/notifications');
+                setNotifications(notifRes.data || []);
+            } catch (e) { console.log('Notifications error:', e); }
 
         } catch (error) {
             console.error('Dashboard fetch error:', error);
@@ -307,6 +319,31 @@ const Dashboard = () => {
         );
     };
 
+
+
+    const renderAlertsWidget = () => {
+        if (unreadCount === 0) return null;
+
+        return (
+            <TouchableOpacity
+                style={[styles.widgetCard, styles.alertWidget]}
+                onPress={() => setIsAlertsVisible(true)}
+            >
+                <View style={styles.alertContent}>
+                    <View style={styles.alertIconBadge}>
+                        <Bell size={20} color="#fff" />
+                        <View style={styles.redDot} />
+                    </View>
+                    <View style={styles.alertTextContainer}>
+                        <Text style={styles.alertTitle}>New Alerts</Text>
+                        <Text style={styles.alertSubtitle}>You have {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}</Text>
+                    </View>
+                </View>
+                <ChevronRight size={20} color="#D4D4D8" />
+            </TouchableOpacity>
+        );
+    };
+
     if (loading) {
         return (
             <SafeAreaView style={styles.container}>
@@ -335,6 +372,7 @@ const Dashboard = () => {
                 </View>
 
                 {/* Widgets */}
+                {renderAlertsWidget()}
                 {renderAccountsWidget()}
                 {renderBillsWidget()}
                 {renderTopExpensesWidget()}
@@ -343,6 +381,13 @@ const Dashboard = () => {
 
                 <View style={{ height: 40 }} />
             </ScrollView>
+
+            <AlertsModal
+                visible={isAlertsVisible}
+                onClose={() => setIsAlertsVisible(false)}
+                notifications={notifications}
+                onRefresh={fetchDashboardData}
+            />
         </SafeAreaView>
     );
 };
@@ -611,6 +656,49 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#64748B',
         textAlign: 'center',
+    },
+    // Alert Widget
+    alertWidget: {
+        backgroundColor: '#3f1717', // Dark Red/Brown tint
+        borderColor: '#7f1d1d',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+    alertContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    alertIconBadge: {
+        backgroundColor: '#ef4444',
+        padding: 8,
+        borderRadius: 20,
+        position: 'relative',
+    },
+    redDot: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#ef4444',
+    },
+    alertTextContainer: {
+        justifyContent: 'center',
+    },
+    alertTitle: {
+        color: '#fca5a5',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    alertSubtitle: {
+        color: '#fecaca',
+        fontSize: 12,
     },
 });
 

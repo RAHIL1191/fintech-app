@@ -49,12 +49,15 @@ const client = new PlaidApi(configuration);
 // Import route modules
 const billsRoutes = require('./routes/bills');
 const budgetsRoutes = require('./routes/budgets');
+const notificationsRoutes = require('./routes/notifications');
 
 // --- Routes ---
 
 // API Routes
 app.use('/api/bills', billsRoutes);
 app.use('/api/budgets', budgetsRoutes);
+app.use('/api/notifications', notificationsRoutes);
+
 
 app.get('/', (req, res) => {
     res.json({ status: 'ok', message: 'FinTech Backend API is live', mode: process.env.PLAID_ENV });
@@ -324,7 +327,6 @@ app.get('/api/transactions', async (req, res) => {
                         t.date >= '2026-01-15' && t.date <= '2026-01-20'
                     );
                     if (janTransactions.length > 0) {
-                        console.log('Transactions from Jan 15-20:');
                         janTransactions.forEach(t => {
                             console.log(`  ${t.date} ${t.authorized_date ? `(auth: ${t.authorized_date})` : '(NO AUTH DATE)'} - ${t.name.substring(0, 40)} - $${t.amount}`);
                         });

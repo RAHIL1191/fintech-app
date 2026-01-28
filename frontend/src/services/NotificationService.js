@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
+import api from '../config/api';
 
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
@@ -74,6 +75,17 @@ export const NotificationService = {
                         },
                         trigger: null, // Send immediately
                     });
+
+                    // Persist to backend
+                    try {
+                        await api.post('/notifications', {
+                            title: "🚨 Over Budget Alert",
+                            body: `You've exceeded your budget for ${budget.name} ($${spent.toFixed(0)} of $${effectiveLimit.toFixed(0)})`,
+                            type: 'danger',
+                            data: { budgetId: budget.id }
+                        });
+                    } catch (e) { console.error('Error saving notification:', e); }
+
                     await AsyncStorage.setItem(dangerKey, 'true');
                     // Also mark warning as sent so we don't downgrade
                     await AsyncStorage.setItem(warningKey, 'true');
@@ -91,6 +103,17 @@ export const NotificationService = {
                         },
                         trigger: null,
                     });
+
+                    // Persist to backend
+                    try {
+                        await api.post('/notifications', {
+                            title: "⚠️ Spending Alert",
+                            body: `You've reached ${percent.toFixed(0)}% of your budget for ${budget.name} ($${spent.toFixed(0)} of $${effectiveLimit.toFixed(0)})`,
+                            type: 'warning',
+                            data: { budgetId: budget.id }
+                        });
+                    } catch (e) { console.error('Error saving notification:', e); }
+
                     await AsyncStorage.setItem(warningKey, 'true');
                 }
             }
@@ -195,6 +218,16 @@ export const NotificationService = {
                 },
                 trigger: triggerInput,
             });
+
+            // Persist to backend
+            try {
+                await api.post('/notifications', {
+                    title,
+                    body,
+                    type: remindDays === 0 ? 'danger' : 'info',
+                    data: { billId: bill.billId, dueDate: bill.dueDate, uniqueId }
+                });
+            } catch (e) { console.error('Error saving notification:', e); }
 
             // We don't strictly need AsyncStorage anymore because we check getAllScheduledNotificationsAsync
             // But checking that is async and might be slow if many. 

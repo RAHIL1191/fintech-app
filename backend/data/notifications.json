@@ -1,0 +1,13 @@
+[
+  {
+    "id": "cf074066-9052-4523-82ae-9da4f071f6d0",
+    "title": "🚨 Over Budget Alert",
+    "body": "You've exceeded your budget for Shopping ($239 of $20)",
+    "data": {
+      "budgetId": 60
+    },
+    "type": "danger",
+    "date": "2026-01-28T21:47:13.802Z",
+    "read": true
+  }
+]
