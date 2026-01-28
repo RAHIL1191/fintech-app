@@ -43,8 +43,28 @@ const TransactionCard = React.memo(({
     const amountPositiveColor = '#10B981'; // Green
     const amountNegativeColor = '#EF4444'; // Red
 
-    const dateStr = new Date(t.date).toLocaleString('en-US', { month: 'short', day: 'numeric' });
-    const timeStr = t.updated_at ? `, ${new Date(t.updated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : '';
+    // Helper to parse date string as local date (avoid UTC timezone shift)
+    const parseLocalDate = (dateStr) => {
+        if (!dateStr) return new Date();
+        // If it's just a date string (YYYY-MM-DD), parse as local date
+        if (dateStr.length === 10 && dateStr.includes('-')) {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day, 12, 0, 0);
+        }
+        // If it's a timestamp, parse it
+        return new Date(dateStr);
+    };
+
+    // Check if we have actual time info (not just a date)
+    const hasTimeInfo = t.authorized_date && (t.authorized_date.includes('T') || t.authorized_date.includes(' '));
+
+    // Use authorized_date if available, otherwise use posted date
+    const displayDate = parseLocalDate(t.authorized_date || t.date);
+    const dateStr = displayDate.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+
+    // Only show time if authorized_date contains actual time info
+    const timeStr = hasTimeInfo ? `, ${displayDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : '';
+
     const categoryName = formatCategory(t.personal_finance_category?.primary || t.category);
 
     return (

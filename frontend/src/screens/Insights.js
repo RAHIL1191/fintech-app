@@ -855,8 +855,21 @@ const Insights = () => {
     };
 
     // --- TRANSACTIONS TAB HELPERS ---
+    // Helper to parse date string as local date (avoid UTC timezone shift)
+    const parseLocalDate = (dateStr) => {
+        if (!dateStr) return new Date();
+        // If it's just a date string (YYYY-MM-DD), parse as local date
+        if (dateStr.length === 10 && dateStr.includes('-')) {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day, 12, 0, 0);
+        }
+        // If it's a timestamp, parse it and use local date components
+        const d = new Date(dateStr);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
+    };
+
     const formatDateHeader = (dateStr) => {
-        const date = new Date(dateStr + 'T12:00:00');
+        const date = parseLocalDate(dateStr);
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short', year: 'numeric' });
     };
 
@@ -978,18 +991,27 @@ const Insights = () => {
             return matchesType && matchesCategory && matchesAccount && matchesDate && matchesAmount && matchesNote;
         });
 
-        // Grouping for SectionList (use authorized_date when available)
+        // Grouping for SectionList - use parseLocalDate to avoid timezone issues
         const sectionsMap = filtered.reduce((acc, t) => {
-            const dateStr = t.authorized_date || t.date; // Prefer authorization date
-            if (!acc[dateStr]) {
-                acc[dateStr] = { title: dateStr, data: [], total: 0 };
+            // Use the same parsing logic as TransactionCard to ensure consistency
+            // Use authorized_date if available, otherwise posted date
+            const dateToUse = t.authorized_date || t.date;
+            const localDate = parseLocalDate(dateToUse);
+            const year = localDate.getFullYear();
+            const month = String(localDate.getMonth() + 1).padStart(2, '0');
+            const day = String(localDate.getDate()).padStart(2, '0');
+            const groupDate = `${year}-${month}-${day}`;
+
+            if (!acc[groupDate]) {
+                acc[groupDate] = { title: groupDate, data: [], total: 0 };
             }
-            acc[dateStr].data.push(t);
-            acc[dateStr].total += t.amount;
+            acc[groupDate].data.push(t);
+            acc[groupDate].total += t.amount;
             return acc;
         }, {});
 
-        return Object.values(sectionsMap).sort((a, b) => new Date(b.title) - new Date(a.title));
+        // Sort by date string (descending) to avoid Date parsing timezone issues
+        return Object.values(sectionsMap).sort((a, b) => b.title.localeCompare(a.title));
     }, [transactions, transactionsFilter, transactionFilters]);
 
     const renderTransactionItem = React.useCallback(({ item: t }) => (
@@ -2058,18 +2080,13 @@ const Insights = () => {
                         }).sort((a, b) => new Date(b.date) - new Date(a.date));
 
                         const renderTxItem = ({ item: t }) => (
-                            <TouchableOpacity
-                                onPress={() => navigation.navigate('TransactionDetails', { transaction: t })}
-                                style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#334155' }}
-                            >
-                                <View style={{ flex: 1 }}>
-                                    <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '500' }}>{getTransactionDisplayName(t)}</Text>
-                                    <Text style={{ color: '#94A3B8', fontSize: 12 }}>{t.date.split('-')[2]} {months[parseInt(t.date.split('-')[1]) - 1].substring(0, 3)}</Text>
-                                </View>
-                                <Text style={{ color: type === 'income' ? '#10B981' : '#FFF', fontSize: 15, fontWeight: '600' }}>
-                                    ${Math.abs(t.amount).toFixed(2)}
-                                </Text>
-                            </TouchableOpacity>
+                            <TransactionCard
+                                t={t}
+                                navigation={navigation}
+                                getIconColor={getIconColor}
+                                getIconForCategory={getIconForCategory}
+                                theme="dark"
+                            />
                         );
 
                         return (

@@ -49,6 +49,26 @@ const Accounts = ({ navigation }) => {
         return `${isNegative ? '-' : ''}$${absAmount}`;
     };
 
+    const getShortInstitutionName = (name) => {
+        if (!name) return 'Bank';
+        // Specific manually requested overrides or cleanups
+        let cleanName = name.replace(/\s*\(.*?\)\s*/g, '').trim(); // Remove (Canada), (US) etc
+
+        // User requested "one word only", which works for "Wealthsimple", "Tangerine", "CIBC", "BMO".
+        // But "Royal Bank" -> "Royal" might be weird. "TD Canada Trust" -> "TD".
+        // Let's stick to the user's specific request for "one word" but maybe with a safelist or just split.
+        // For widely known CAD banks:
+        if (cleanName.includes('Wealthsimple')) return 'Wealthsimple';
+        if (cleanName.includes('BMO')) return 'BMO';
+        if (cleanName.includes('RBC') || cleanName.includes('Royal Bank')) return 'RBC';
+        if (cleanName.includes('TD')) return 'TD';
+        if (cleanName.includes('Scotiabank')) return 'Scotiabank';
+        if (cleanName.includes('CIBC')) return 'CIBC';
+
+        // Default: Try first word if it looks like a real name, otherwise full name
+        return cleanName.split(' ')[0] || cleanName;
+    };
+
     const spinValue = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -219,10 +239,8 @@ const Accounts = ({ navigation }) => {
 
     // Group filtered accounts by institution
     const groupedAccounts = filteredAccounts.reduce((groups, account) => {
-        let institutionName = account.institution_name || 'Bank Account';
-        if (institutionName === 'BMO Bank of Montreal') {
-            institutionName = 'BMO';
-        }
+        const rawName = account.institution_name || 'Bank Account';
+        const institutionName = getShortInstitutionName(rawName);
 
         if (!groups[institutionName]) {
             groups[institutionName] = [];
@@ -366,8 +384,8 @@ const Accounts = ({ navigation }) => {
                                         <View style={styles.bankIconPlaceholder}>
                                             <Text style={styles.bankIconText}>{name.charAt(0)}</Text>
                                         </View>
-                                        <View>
-                                            <Text style={styles.bankName}>{name}</Text>
+                                        <View style={{ flex: 1, marginRight: 8 }}>
+                                            <Text style={styles.bankName} numberOfLines={1} ellipsizeMode="tail">{name}</Text>
                                             <Text style={styles.bankSubtext}>{groupAccounts.length} accounts</Text>
                                         </View>
                                     </View>
@@ -556,6 +574,8 @@ const styles = StyleSheet.create({
     bankHeaderLeft: {
         flexDirection: 'row',
         alignItems: 'center',
+        flex: 1,
+        marginRight: 10,
     },
     bankIconPlaceholder: {
         width: 44,

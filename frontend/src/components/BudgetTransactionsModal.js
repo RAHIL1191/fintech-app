@@ -30,27 +30,53 @@ const BudgetTransactionsModal = ({ visible, onClose, transactions = [], budgetNa
         return '#64748B'; // Slate
     };
 
-    // ... formatTime and formatDateHeader ... (keep them if needed for helper but formatDateHeader is used in SectionHeader)
+    // Helper to parse date string as local date (avoid UTC timezone shift)
+    const parseLocalDate = (dateStr) => {
+        if (!dateStr) return new Date();
+        // If it's just a date string (YYYY-MM-DD), parse as local date
+        if (dateStr.length === 10 && dateStr.includes('-')) {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day, 12, 0, 0);
+        }
+        // If it's a timestamp, parse it and use local date components
+        const d = new Date(dateStr);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
+    };
+
+    // Helper to format date for header without timezone issues
     const formatDateHeader = (dateStr) => {
-        const date = new Date(dateStr + 'T12:00:00');
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        // dateStr is in format "YYYY-MM-DD"
+        // Parse it as a local date to avoid UTC timezone shifts
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+        const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const yearStr = date.getFullYear();
+        return `${dayName}, ${monthDay}, ${yearStr}`;
     };
 
     // Group by Date for SectionList
     const sections = React.useMemo(() => {
         const groups = transactions.reduce((acc, t) => {
-            const dateStr = t.date;
-            if (!acc[dateStr]) {
-                acc[dateStr] = { date: dateStr, data: [], total: 0 };
+            // Use parseLocalDate to extract local date, avoiding UTC shift
+            const dateToUse = t.authorized_date || t.date;
+            const localDate = parseLocalDate(dateToUse);
+            const year = localDate.getFullYear();
+            const month = String(localDate.getMonth() + 1).padStart(2, '0');
+            const day = String(localDate.getDate()).padStart(2, '0');
+            const groupDate = `${year}-${month}-${day}`;
+
+            if (!acc[groupDate]) {
+                acc[groupDate] = { date: groupDate, data: [], total: 0 };
             }
-            acc[dateStr].data.push(t);
-            acc[dateStr].total += t.amount;
+            acc[groupDate].data.push(t);
+            acc[groupDate].total += t.amount;
             return acc;
         }, {});
 
-        // Sort keys desc
+        // Sort by date string (descending)
         return Object.values(groups)
-            .sort((a, b) => new Date(b.date) - new Date(a.date))
+            .sort((a, b) => b.date.localeCompare(a.date))
             .map(g => ({
                 title: g.date,
                 total: g.total,

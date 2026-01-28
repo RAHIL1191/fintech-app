@@ -82,7 +82,7 @@ const CreateBudget = ({ navigation, route }) => {
             const uniqueCategories = [...new Map(allCategories.map(item => [item.name, item])).values()];
 
             setAvailableCategories(uniqueCategories);
-            setAvailableAccounts(accRes.data);
+            setAvailableAccounts(accRes.data.accounts || []);
         } catch (err) {
             console.error(err);
         }

@@ -27,6 +27,41 @@ async function loadNormalizations() {
     }
 }
 
+// Explode transactions with splits into individual child transactions
+// This mirrors the logic in server.js /api/transactions endpoint
+function explodeSplits(transactions, metadata = {}) {
+    const result = [];
+    for (const t of transactions) {
+        const txOverride = metadata[t.transaction_id] || {};
+        let splits = txOverride.splits || t.splits;
+
+        if (typeof splits === 'string') {
+            try { splits = JSON.parse(splits); } catch (e) { splits = null; }
+        }
+
+        if (Array.isArray(splits) && splits.length > 0) {
+            // Determine sign based on parent amount (Income is negative, Expense is positive)
+            const sign = t.amount < 0 ? -1 : 1;
+
+            splits.forEach((split, idx) => {
+                const splitAmount = Math.abs(parseFloat(split.amount || 0)) * sign;
+                result.push({
+                    ...t,
+                    transaction_id: `${t.transaction_id}_split_${idx}`,
+                    original_transaction_id: t.transaction_id,
+                    amount: splitAmount,
+                    category: split.category,
+                    personal_finance_category: { primary: split.category },
+                    splits: null // Clear splits on children to prevent confusion
+                });
+            });
+        } else {
+            result.push(t);
+        }
+    }
+    return result;
+}
+
 // Normalize category name using loaded rules
 function normalizeCategory(category) {
     if (!category) return 'Uncategorized';
@@ -345,15 +380,35 @@ router.get('/summary', async (req, res) => {
         });
         budgets = Array.from(budgetMap.values());
 
-        // 3. Fetch Raw Transactions
+        // 3. Fetch Raw Transactions with account information
         const manualTxs = await manager.all(`
-            SELECT * FROM manual_transactions 
-            WHERE date >= ? AND date <= ?
+            SELECT 
+                mt.*,
+                ca.name as account_name,
+                ca.type as account_type,
+                ca.subtype as account_subtype,
+                pi.institution_name,
+                am.owner_name as account_owner_name
+            FROM manual_transactions mt
+            LEFT JOIN cached_accounts ca ON mt.account_id = ca.account_id
+            LEFT JOIN plaid_items pi ON ca.item_id = pi.item_id
+            LEFT JOIN account_metadata am ON mt.account_id = am.account_id
+            WHERE mt.date >= ? AND mt.date <= ?
         `, [startOfMonth, endOfMonth]);
 
         const plaidTxs = await manager.all(`
-            SELECT * FROM cached_transactions 
-            WHERE date >= ? AND date <= ?
+            SELECT 
+                ct.*,
+                ca.name as account_name,
+                ca.type as account_type,
+                ca.subtype as account_subtype,
+                pi.institution_name,
+                am.owner_name as account_owner_name
+            FROM cached_transactions ct
+            LEFT JOIN cached_accounts ca ON ct.account_id = ca.account_id
+            LEFT JOIN plaid_items pi ON ca.item_id = pi.item_id
+            LEFT JOIN account_metadata am ON ct.account_id = am.account_id
+            WHERE ct.date >= ? AND ct.date <= ?
         `, [startOfMonth, endOfMonth]);
 
         const allTxs = [...manualTxs, ...plaidTxs];
@@ -442,11 +497,15 @@ router.get('/summary', async (req, res) => {
             dedupedTxs.push(t);
         }
 
+        // 6b. Explode split transactions so each portion counts towards its category
+        const explodedTxs = explodeSplits(dedupedTxs, metadata);
+
         // 7. Calculate Spent per Budget
         const summary = budgets.map(b => {
             const budgetCats = b.categories ? JSON.parse(b.categories) : [];
+            const budgetAccounts = b.accounts ? JSON.parse(b.accounts) : [];
 
-            const relevantTxs = dedupedTxs.filter(tx => {
+            const relevantTxs = explodedTxs.filter(tx => {
                 // 1. Exclude from Budget (Global Override)
                 if (tx.exclude_from_budget === 1) return false;
 
@@ -459,7 +518,12 @@ router.get('/summary', async (req, res) => {
                 // 3. Exclude Transfers (Standard Rule)
                 if (tx.is_transfer) return false;
 
-                // 4. Check Category Match
+                // 4. Check Account Match (if accounts are selected)
+                if (budgetAccounts.length > 0) {
+                    if (!budgetAccounts.includes(tx.account_id)) return false;
+                }
+
+                // 5. Check Category Match
                 if (budgetCats.length > 0) {
                     const hasMatch = budgetCats.some(budgetCat => isCategoryMatch(tx.category, budgetCat));
                     if (!hasMatch) return false;
@@ -536,15 +600,35 @@ router.get('/:id', async (req, res) => {
             queryStartDate = budgetStartDateStr;
         }
 
-        // Fetch transactions for the extended range
+        // Fetch transactions for the extended range with account information
         const manualTxs = await manager.all(`
-            SELECT * FROM manual_transactions 
-            WHERE date >= ? AND date <= ?
+            SELECT 
+                mt.*,
+                ca.name as account_name,
+                ca.type as account_type,
+                ca.subtype as account_subtype,
+                pi.institution_name,
+                am.owner_name as account_owner_name
+            FROM manual_transactions mt
+            LEFT JOIN cached_accounts ca ON mt.account_id = ca.account_id
+            LEFT JOIN plaid_items pi ON ca.item_id = pi.item_id
+            LEFT JOIN account_metadata am ON mt.account_id = am.account_id
+            WHERE mt.date >= ? AND mt.date <= ?
         `, [queryStartDate, endOfMonth]);
 
         const plaidTxs = await manager.all(`
-            SELECT * FROM cached_transactions 
-            WHERE date >= ? AND date <= ?
+            SELECT 
+                ct.*,
+                ca.name as account_name,
+                ca.type as account_type,
+                ca.subtype as account_subtype,
+                pi.institution_name,
+                am.owner_name as account_owner_name
+            FROM cached_transactions ct
+            LEFT JOIN cached_accounts ca ON ct.account_id = ca.account_id
+            LEFT JOIN plaid_items pi ON ca.item_id = pi.item_id
+            LEFT JOIN account_metadata am ON ct.account_id = am.account_id
+            WHERE ct.date >= ? AND ct.date <= ?
         `, [queryStartDate, endOfMonth]);
 
         const allTxs = [...manualTxs, ...plaidTxs];
@@ -641,9 +725,13 @@ router.get('/:id', async (req, res) => {
             dedupedTxs.push(t);
         }
 
-        const budgetCats = budget.categories ? JSON.parse(budget.categories) : [];
+        // Explode split transactions so each portion counts towards its category
+        const explodedTxs = explodeSplits(dedupedTxs, metadata);
 
-        const relevantTxs = dedupedTxs.filter(tx => {
+        const budgetCats = budget.categories ? JSON.parse(budget.categories) : [];
+        const budgetAccounts = budget.accounts ? JSON.parse(budget.accounts) : [];
+
+        const relevantTxs = explodedTxs.filter(tx => {
             // 1. Exclude from Budget (Global Override)
             if (tx.exclude_from_budget === 1) return false;
 
@@ -654,6 +742,12 @@ router.get('/:id', async (req, res) => {
             // 3. Exclude transfers from budget calculations
             if (tx.is_transfer) return false;
 
+            // 4. Check Account Match (if accounts are selected)
+            if (budgetAccounts.length > 0) {
+                if (!budgetAccounts.includes(tx.account_id)) return false;
+            }
+
+            // 5. Check Category Match
             if (budgetCats.length > 0) {
                 // Check if the transaction matches ANY of the selected budget categories
                 const hasMatch = budgetCats.some(budgetCat => isCategoryMatch(tx.category, budgetCat));

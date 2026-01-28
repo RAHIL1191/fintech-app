@@ -28,6 +28,8 @@ const Dashboard = () => {
     const [topExpenses, setTopExpenses] = useState([]);
     const [budgets, setBudgets] = useState([]);
     const [cashFlow, setCashFlow] = useState({ income: 0, expenses: 0, net: 0 });
+    const [prevMonthExpenses, setPrevMonthExpenses] = useState(0);
+    const [currentMonthExpensesTotal, setCurrentMonthExpensesTotal] = useState(0);
 
     const fetchDashboardData = async () => {
         try {
@@ -58,6 +60,17 @@ const Dashboard = () => {
             const transactions = txRes.data.transactions || [];
             // Filter to current month expenses
             const monthlyExpenses = transactions.filter(t => t.date && t.date.startsWith(thisMonthStr) && t.amount > 0 && !t.is_transfer);
+            const currentTotal = monthlyExpenses.reduce((s, t) => s + t.amount, 0);
+            setCurrentMonthExpensesTotal(currentTotal);
+
+            // Calculate previous month expenses (full month)
+            const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevMonthStr = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`;
+            const prevMonthExpensesTxs = transactions.filter(t =>
+                t.date && t.date.startsWith(prevMonthStr) && t.amount > 0 && !t.is_transfer
+            );
+            const prevTotal = prevMonthExpensesTxs.reduce((s, t) => s + t.amount, 0);
+            setPrevMonthExpenses(prevTotal);
 
             // Group by Category
             const catMap = {};
@@ -162,7 +175,27 @@ const Dashboard = () => {
     );
 
     const renderTopExpensesWidget = () => {
-        const total = topExpenses.reduce((s, e) => s + e.amount, 0);
+        const top3Total = topExpenses.reduce((s, e) => s + e.amount, 0);
+        // Compare Total Monthly Spending (not just top 3)
+        const diff = currentMonthExpensesTotal - prevMonthExpenses;
+        const diffAbs = Math.abs(diff);
+        const prevMonthName = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)
+            .toLocaleString('default', { month: 'short', year: 'numeric' });
+
+        let comparisonText = '';
+        let comparisonColor = '#64748B';
+        if (prevMonthExpenses > 0) {
+            if (diff < 0) {
+                comparisonText = `You're spending $${diffAbs.toFixed(0)} less than ${prevMonthName}`;
+                comparisonColor = '#10B981'; // Green
+            } else if (diff > 0) {
+                comparisonText = `You're spending $${diffAbs.toFixed(0)} more than ${prevMonthName}`;
+                comparisonColor = '#F59E0B'; // Amber warning
+            } else {
+                comparisonText = `Same spending as ${prevMonthName}`;
+            }
+        }
+
         return (
             <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Insights')}>
                 <View style={styles.widgetHeader}>
@@ -185,7 +218,9 @@ const Dashboard = () => {
                         );
                     })}
                 </View>
-                <Text style={styles.totalText}>${total.toFixed(0)}</Text>
+                {comparisonText ? (
+                    <Text style={[styles.comparisonText, { color: comparisonColor }]}>{comparisonText}</Text>
+                ) : null}
             </TouchableOpacity>
         );
     };
@@ -460,6 +495,12 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#0F172A',
         marginTop: 4,
+    },
+    comparisonText: {
+        fontSize: 12,
+        marginTop: 6,
+        fontWeight: '500',
+        textAlign: 'center',
     },
     // Budget
     budgetItem: {
