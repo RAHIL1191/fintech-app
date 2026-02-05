@@ -616,7 +616,9 @@ const Insights = () => {
         const dailyBalances = {};
         transactions.forEach(t => {
             if (t.is_transfer) return;
-            const d = new Date(t.date);
+            // Use authorized_date if available, like Transaction tab does
+            const dateToUse = t.authorized_date || t.date;
+            const d = new Date(dateToUse + 'T12:00:00');
             if (d.getMonth() === selectedMonthIdx && d.getFullYear() === selectedYear) {
                 const day = d.getDate();
                 if (!dailyBalances[day]) {
@@ -722,7 +724,13 @@ const Insights = () => {
         const dayTransactions = transactions.filter(t => {
             if (t.is_transfer) return false;
             if (selectedAccountIds.length > 0 && !selectedAccountIds.includes(t.account_id)) return false;
-            return t.date === dateStr;
+            // Use authorized_date if available, like Transaction tab does
+            // Parse date as local date to match the calendar grouping logic
+            const txDateToUse = t.authorized_date || t.date;
+            const txDate = new Date(txDateToUse + 'T12:00:00');
+            return txDate.getDate() === selectedDate.day &&
+                txDate.getMonth() === selectedDate.month &&
+                txDate.getFullYear() === selectedDate.year;
         });
 
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -778,7 +786,7 @@ const Insights = () => {
                                     <View style={styles.dailyTransactionInfo}>
                                         <Text style={styles.dailyTransactionName}>{t.name}</Text>
                                         <Text style={styles.dailyTransactionMeta}>
-                                            Today, {new Date(t.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} • {t.category || 'Uncategorized'}
+                                            {monthName} {selectedDate.day} • {t.category || 'Uncategorized'}
                                         </Text>
                                         <Text style={styles.dailyTransactionAccount}>{t.account_name || 'Account'}</Text>
                                     </View>
@@ -807,7 +815,7 @@ const Insights = () => {
                                     <View style={styles.dailyTransactionInfo}>
                                         <Text style={styles.dailyTransactionName}>{t.name}</Text>
                                         <Text style={styles.dailyTransactionMeta}>
-                                            Today, {new Date(t.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} • {t.category || 'Uncategorized'}
+                                            {monthName} {selectedDate.day} • {t.category || 'Uncategorized'}
                                         </Text>
                                         <Text style={styles.dailyTransactionAccount}>{t.account_name || 'Account'}</Text>
                                     </View>
@@ -1676,7 +1684,15 @@ const Insights = () => {
             >
                 {selectedDate && (() => {
                     const dateStr = `${selectedDate.year}-${String(selectedDate.month + 1).padStart(2, '0')}-${String(selectedDate.day).padStart(2, '0')}`;
-                    const dayTransactions = transactions.filter(t => !t.is_transfer && t.date === dateStr);
+                    // Use authorized_date if available, like Transaction tab does
+                    const dayTransactions = transactions.filter(t => {
+                        if (t.is_transfer) return false;
+                        const txDateToUse = t.authorized_date || t.date;
+                        const txDate = new Date(txDateToUse + 'T12:00:00');
+                        return txDate.getDate() === selectedDate.day &&
+                            txDate.getMonth() === selectedDate.month &&
+                            txDate.getFullYear() === selectedDate.year;
+                    });
 
                     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1739,7 +1755,7 @@ const Insights = () => {
                                                     <View style={styles.modalTransactionInfo}>
                                                         <Text style={styles.modalTransactionName}>{getTransactionDisplayName(t)}</Text>
                                                         <Text style={styles.modalTransactionMeta}>
-                                                            Today, {t.date.split('-')[2]} • {t.category || 'Uncategorized'}
+                                                            {monthName} {selectedDate.day} • {t.category || 'Uncategorized'}
                                                         </Text>
                                                         <Text style={styles.modalTransactionAccount}>🏦 {t.account_name || 'Account'}</Text>
                                                     </View>
@@ -1773,7 +1789,7 @@ const Insights = () => {
                                                     <View style={styles.modalTransactionInfo}>
                                                         <Text style={styles.modalTransactionName}>{getTransactionDisplayName(t)}</Text>
                                                         <Text style={styles.modalTransactionMeta}>
-                                                            Today, {t.date.split('-')[2]} • {t.category || 'Uncategorized'}
+                                                            {monthName} {selectedDate.day} • {t.category || 'Uncategorized'}
                                                         </Text>
                                                         <Text style={styles.modalTransactionAccount}>🏦 {t.account_name || 'Account'}</Text>
                                                     </View>

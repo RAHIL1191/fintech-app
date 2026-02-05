@@ -30,8 +30,17 @@ const CreateBudget = ({ navigation, route }) => {
         : (existingBudget?.start_date || new Date().toISOString().split('T')[0]);
 
     const [startDate, setStartDate] = useState(defaultStartDate);
-    const [selectedCategories, setSelectedCategories] = useState(existingBudget?.categories || []);
-    const [selectedAccounts, setSelectedAccounts] = useState(existingBudget?.accounts || []);
+    // Parse JSON strings if needed (DB stores as TEXT)
+    const parseJsonField = (field) => {
+        if (!field) return [];
+        if (Array.isArray(field)) return field;
+        if (typeof field === 'string') {
+            try { return JSON.parse(field); } catch (e) { return []; }
+        }
+        return [];
+    };
+    const [selectedCategories, setSelectedCategories] = useState(parseJsonField(existingBudget?.categories));
+    const [selectedAccounts, setSelectedAccounts] = useState(parseJsonField(existingBudget?.accounts));
     const [isRollover, setIsRollover] = useState(!!existingBudget?.is_rollover);
     const [alertPercent, setAlertPercent] = useState(existingBudget?.alert_percent || 70);
 
@@ -82,7 +91,18 @@ const CreateBudget = ({ navigation, route }) => {
             const uniqueCategories = [...new Map(allCategories.map(item => [item.name, item])).values()];
 
             setAvailableCategories(uniqueCategories);
-            setAvailableAccounts(accRes.data.accounts || []);
+            const accounts = accRes.data.accounts || [];
+            setAvailableAccounts(accounts);
+
+            // Filter out stale IDs (e.g. if account was re-linked with new ID)
+            if (selectedAccounts.length > 0 && accounts.length > 0) {
+                const validIds = selectedAccounts.filter(id => accounts.find(a => a.account_id === id));
+                if (validIds.length !== selectedAccounts.length) {
+                    console.log('Removing stale account IDs');
+                    setSelectedAccounts(validIds);
+                }
+            }
+
         } catch (err) {
             console.error(err);
         }

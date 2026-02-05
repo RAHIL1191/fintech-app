@@ -723,6 +723,45 @@ class DatabaseManager {
     async deletePlaidItem(itemId) {
         if (!this.pool && !this.db) await this.init();
 
+        // 0. Cleanup Budgets: Remove associated accounts from any budgets
+        try {
+            // Get accounts for this item
+            const accountsSql = this.isPostgres
+                ? 'SELECT account_id FROM cached_accounts WHERE item_id = $1'
+                : 'SELECT account_id FROM cached_accounts WHERE item_id = ?';
+            const accounts = await this.all(accountsSql, [itemId]);
+            const accountIdsToRemove = new Set(accounts.map(a => a.account_id));
+
+            if (accountIdsToRemove.size > 0) {
+                const budgets = await this.all('SELECT * FROM budgets');
+                for (const budget of budgets) {
+                    if (!budget.accounts) continue;
+
+                    let budgetAccounts = [];
+                    try {
+                        budgetAccounts = typeof budget.accounts === 'string'
+                            ? JSON.parse(budget.accounts)
+                            : budget.accounts;
+                    } catch (e) { continue; }
+
+                    if (!Array.isArray(budgetAccounts)) continue;
+
+                    const originalLength = budgetAccounts.length;
+                    const filteredAccounts = budgetAccounts.filter(id => !accountIdsToRemove.has(id));
+
+                    if (filteredAccounts.length !== originalLength) {
+                        console.log(`Cleanup: Remove ${originalLength - filteredAccounts.length} stale accounts from Budget ${budget.id}`);
+                        const updateSql = this.isPostgres
+                            ? 'UPDATE budgets SET accounts = $1 WHERE id = $2'
+                            : 'UPDATE budgets SET accounts = ? WHERE id = ?';
+                        await this.run(updateSql, [JSON.stringify(filteredAccounts), budget.id]);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error cleaning up budgets during Plaid deletion:', err);
+        }
+
         // 1. Delete transactions associated with this item
         const txDeleteSql = this.isPostgres
             ? 'DELETE FROM cached_transactions WHERE item_id = $1'

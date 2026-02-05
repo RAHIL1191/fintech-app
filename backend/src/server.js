@@ -564,6 +564,7 @@ app.get('/api/accounts', async (req, res) => {
 
     try {
         const items = await db.getAllPlaidItems();
+        logToFile(`Debug: /api/accounts found ${items.length} Plaid items`);
         if (items.length === 0) {
             return res.json({ accounts: [], item: {}, request_id: '' });
         }
@@ -669,6 +670,7 @@ app.get('/api/accounts', async (req, res) => {
             results.forEach(batch => allAccounts.push(...batch));
         }
 
+        logToFile(`Debug: Returning ${allAccounts.length} accounts`);
         res.json({ accounts: allAccounts, request_id: 'merged' });
     } catch (error) {
         console.error('Error in /api/accounts:', error);

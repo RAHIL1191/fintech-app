@@ -9,5 +9,16 @@
     "type": "danger",
     "date": "2026-01-28T21:47:13.802Z",
     "read": true
+  },
+  {
+    "id": "2316c45b-9f37-47f7-a0e0-ef726c4d4519",
+    "title": "🚨 Over Budget Alert",
+    "body": "You've exceeded your budget for Grocery ($423 of $400)",
+    "data": {
+      "budgetId": 62
+    },
+    "type": "danger",
+    "date": "2026-01-30T15:17:04.745Z",
+    "read": true
   }
 ]
