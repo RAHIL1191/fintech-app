@@ -2051,7 +2051,7 @@ const Insights = () => {
             <Modal
                 visible={!!expandedModalSection}
                 animationType="slide"
-                presentationStyle="pageSheet"
+                transparent={true}
                 onRequestClose={() => setExpandedModalSection(null)}
             >
                 <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#050B14' }]}>
