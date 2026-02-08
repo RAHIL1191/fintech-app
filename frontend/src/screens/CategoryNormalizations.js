@@ -99,7 +99,7 @@ const CategoryNormalizations = ({ navigation }) => {
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.navigate('MainTabs', { screen: 'Insights' })} style={styles.backButton}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <ChevronLeft size={24} color="#FFF" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Category Normalizations</Text>

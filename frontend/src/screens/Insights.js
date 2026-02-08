@@ -205,8 +205,9 @@ const Insights = () => {
 
             const amt = parseFloat(t.amount);
             if (isNaN(amt)) return;
-            // Ensure strictly using YYYY-MM-DD to avoid timezone shifts if possible, but Date object is safer 
-            const [y, m, dVal] = t.date.split('-').map(Number);
+            // Use authorized_date (purchase date) if available, fallback to date (posted date)
+            const dateToUse = t.authorized_date || t.date;
+            const [y, m, dVal] = dateToUse.split('-').map(Number);
             const d = new Date(y, m - 1, dVal);
 
             // --- 1. Compute Main Groups (based on groupBy) ---
@@ -970,7 +971,10 @@ const Insights = () => {
             // 4. Date Range
             let matchesDate = true;
             if (transactionFilters.dateRange && transactionFilters.dateRange.start) {
-                const tDate = new Date(t.date);
+                // Use authorized_date (purchase date) if available, fallback to date (posted date)
+                const dateToUse = t.authorized_date || t.date;
+                const [y, m, d] = dateToUse.split('-').map(Number);
+                const tDate = new Date(y, m - 1, d);
                 const start = new Date(transactionFilters.dateRange.start);
                 if (transactionFilters.dateRange.end) {
                     matchesDate = tDate >= start && tDate <= new Date(transactionFilters.dateRange.end);
@@ -1091,7 +1095,9 @@ const Insights = () => {
             if (t.is_transfer) return false;
             if (selectedAccountIds.length > 0 && !selectedAccountIds.includes(t.account_id)) return false;
 
-            const [y, m, d] = t.date.split('-').map(Number);
+            // Use authorized_date (purchase date) if available, fallback to date (posted date)
+            const dateToUse = t.authorized_date || t.date;
+            const [y, m, d] = dateToUse.split('-').map(Number);
             const txDate = new Date(y, m - 1, d);
             return txDate >= start && txDate <= end;
         });
@@ -1876,15 +1882,16 @@ const Insights = () => {
                                 // Calculate transactions
                                 const monthTransactions = transactions.filter(t => {
                                     if (t.is_transfer) return false;
-                                    const d = new Date(t.date);
+                                    // Use authorized_date (purchase date) if available, fallback to date (posted date)
+                                    const dateToUse = t.authorized_date || t.date;
+                                    const [y, m, day] = dateToUse.split('-').map(Number);
 
                                     if (range) {
-                                        const tDate = new Date(d); tDate.setHours(0, 0, 0, 0);
+                                        const tDate = new Date(y, m - 1, day); tDate.setHours(0, 0, 0, 0);
                                         const rStart = new Date(range.start); rStart.setHours(0, 0, 0, 0);
                                         const rEnd = new Date(range.end); rEnd.setHours(0, 0, 0, 0);
                                         return tDate >= rStart && tDate <= rEnd;
                                     } else {
-                                        const [y, m, day] = t.date.split('-').map(Number);
                                         return (m - 1) === monthIndex && y === year;
                                     }
                                 });
@@ -1907,7 +1914,9 @@ const Insights = () => {
 
                                 monthTransactions.forEach(t => {
                                     const amt = parseFloat(t.amount);
-                                    const [y, m, d] = t.date.split('-').map(Number);
+                                    // Use authorized_date (purchase date) if available, fallback to date (posted date)
+                                    const dateToUse = t.authorized_date || t.date;
+                                    const [y, m, d] = dateToUse.split('-').map(Number);
 
                                     if (!isNaN(amt)) {
                                         const tDate = new Date(y, m - 1, d); tDate.setHours(0, 0, 0, 0);
@@ -2075,7 +2084,9 @@ const Insights = () => {
 
                             const amt = parseFloat(t.amount);
                             if (isNaN(amt)) return false;
-                            const [y, m, d] = t.date.split('-').map(Number);
+                            // Use authorized_date (purchase date) if available, fallback to date (posted date)
+                            const dateToUse = t.authorized_date || t.date;
+                            const [y, m, d] = dateToUse.split('-').map(Number);
                             const tDate = new Date(y, m - 1, d); tDate.setHours(0, 0, 0, 0);
 
                             // Filter by Range or Month/Year
