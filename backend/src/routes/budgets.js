@@ -7,6 +7,14 @@ let categoryNormalizations = null;
 let lastNormalizationsLoad = null;
 const NORMALIZATION_CACHE_DURATION = 60000; // 1 minute
 
+// Helper: format a Date as 'YYYY-MM-DD' using LOCAL time (avoids UTC shift from toISOString)
+function toLocalDateStr(d) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // Load category normalizations from database
 async function loadNormalizations() {
     try {
@@ -151,8 +159,8 @@ router.get('/', async (req, res) => {
         const queryDate = req.query.date ? new Date(req.query.date) : new Date();
         const year = queryDate.getFullYear();
         const month = queryDate.getMonth();
-        const startDate = new Date(year, month, 1).toISOString().split('T')[0];
-        const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+        const startDate = toLocalDateStr(new Date(year, month, 1));
+        const endDate = toLocalDateStr(new Date(year, month + 1, 0));
 
         // 1. Fetch Budgets
         const budgets = await manager.all('SELECT * FROM budgets WHERE is_active = 1 ORDER BY created_at DESC');
@@ -161,17 +169,17 @@ router.get('/', async (req, res) => {
         // We need fields to determine match: category, overrides, manual_budget_id, exclude_from_budget
         const transactionSql = `
             SELECT 
-                t.transaction_id, t.amount, t.date, t.personal_finance_category,
+                t.transaction_id, t.amount, t.date, t.authorized_date, t.personal_finance_category,
                 m.category as manual_category, m.exclude_from_budget, m.manual_budget_id,
                 'plaid' as source
             FROM cached_transactions t
             LEFT JOIN transaction_metadata m ON t.transaction_id = m.transaction_id
-            WHERE t.date >= ? AND t.date <= ?
+            WHERE COALESCE(t.authorized_date, t.date) >= ? AND COALESCE(t.authorized_date, t.date) <= ?
             
             UNION ALL
             
             SELECT 
-                mt.transaction_id, mt.amount, mt.date, mt.category as personal_finance_category, 
+                mt.transaction_id, mt.amount, mt.date, NULL as authorized_date, mt.category as personal_finance_category, 
                 m.category as manual_category, m.exclude_from_budget, m.manual_budget_id,
                 'manual' as source
             FROM manual_transactions mt
@@ -211,7 +219,7 @@ router.get('/', async (req, res) => {
                 // Date Overlap Check (Transaction vs Budget Active Period)
                 // Note: We already filtered transactions by the requested month.
                 // We just need to ensure the budget was active on the transaction date.
-                const txDate = new Date(tx.date);
+                const txDate = new Date(tx.authorized_date || tx.date);
                 if (bStart && txDate < bStart) return;
                 if (bEnd && txDate > bEnd) return;
 
@@ -337,12 +345,12 @@ router.get('/summary', async (req, res) => {
         if (month && year) {
             const m = parseInt(month) - 1; // 0-11
             const y = parseInt(year);
-            startOfMonth = new Date(y, m, 1).toISOString().split('T')[0];
-            endOfMonth = new Date(y, m + 1, 0).toISOString().split('T')[0];
+            startOfMonth = toLocalDateStr(new Date(y, m, 1));
+            endOfMonth = toLocalDateStr(new Date(y, m + 1, 0));
         } else {
             const now = new Date();
-            startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-            endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+            startOfMonth = toLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+            endOfMonth = toLocalDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
         }
 
         // 2. Fetch and Filter Budgets
@@ -394,6 +402,7 @@ router.get('/summary', async (req, res) => {
             LEFT JOIN plaid_items pi ON ca.item_id = pi.item_id
             LEFT JOIN account_metadata am ON mt.account_id = am.account_id
             WHERE mt.date >= ? AND mt.date <= ?
+
         `, [startOfMonth, endOfMonth]);
 
         const plaidTxs = await manager.all(`
@@ -408,7 +417,7 @@ router.get('/summary', async (req, res) => {
             LEFT JOIN cached_accounts ca ON ct.account_id = ca.account_id
             LEFT JOIN plaid_items pi ON ca.item_id = pi.item_id
             LEFT JOIN account_metadata am ON ct.account_id = am.account_id
-            WHERE ct.date >= ? AND ct.date <= ?
+            WHERE COALESCE(ct.authorized_date, ct.date) >= ? AND COALESCE(ct.authorized_date, ct.date) <= ?
         `, [startOfMonth, endOfMonth]);
 
         const allTxs = [...manualTxs, ...plaidTxs];
@@ -587,14 +596,14 @@ router.get('/:id', async (req, res) => {
         const targetYear = year ? parseInt(year) : now.getFullYear();
         const targetMonth = month ? parseInt(month) : now.getMonth() + 1; // 1-12
 
-        const startOfMonth = new Date(targetYear, targetMonth - 1, 1).toISOString().split('T')[0];
-        const endOfMonth = new Date(targetYear, targetMonth, 0).toISOString().split('T')[0];
+        const startOfMonth = toLocalDateStr(new Date(targetYear, targetMonth - 1, 1));
+        const endOfMonth = toLocalDateStr(new Date(targetYear, targetMonth, 0));
 
         // Determine query range based on Rollover
         let queryStartDate = startOfMonth;
         const isRollover = !!budget.is_rollover;
         const budgetStartDate = budget.start_date ? new Date(budget.start_date) : new Date(budget.created_at);
-        const budgetStartDateStr = budgetStartDate.toISOString().split('T')[0];
+        const budgetStartDateStr = toLocalDateStr(budgetStartDate);
 
         if (isRollover && budgetStartDate < new Date(startOfMonth)) {
             queryStartDate = budgetStartDateStr;
@@ -628,7 +637,7 @@ router.get('/:id', async (req, res) => {
             LEFT JOIN cached_accounts ca ON ct.account_id = ca.account_id
             LEFT JOIN plaid_items pi ON ca.item_id = pi.item_id
             LEFT JOIN account_metadata am ON ct.account_id = am.account_id
-            WHERE ct.date >= ? AND ct.date <= ?
+            WHERE COALESCE(ct.authorized_date, ct.date) >= ? AND COALESCE(ct.authorized_date, ct.date) <= ?
         `, [queryStartDate, endOfMonth]);
 
         const allTxs = [...manualTxs, ...plaidTxs];
