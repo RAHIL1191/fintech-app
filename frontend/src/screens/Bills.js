@@ -176,7 +176,7 @@ const Bills = ({ navigation }) => {
                 onLongPress={() => handleLongPress(bill)}
                 delayLongPress={300}
             >
-                <View style={[styles.billIconCircle, { backgroundColor: isSelected ? '#3B82F6' : iconColor + '20' }]}>
+                <View style={[styles.billIconCircle, { backgroundColor: isSelected ? '#38BDF8' : iconColor + '20' }]}>
                     {isSelected ? (
                         <Check size={24} color="#FFF" />
                     ) : (
@@ -325,7 +325,7 @@ const Bills = ({ navigation }) => {
             markedDates[selectedDate] = {
                 ...(markedDates[selectedDate] || {}),
                 selected: true,
-                selectedColor: '#3B82F6'
+                selectedColor: '#38BDF8'
             };
         }
 
@@ -386,9 +386,15 @@ const Bills = ({ navigation }) => {
                     markedDates={markedDates}
                     markingType={'multi-dot'}
                     theme={{
-                        selectedDayBackgroundColor: '#3B82F6',
-                        todayTextColor: '#3B82F6',
-                        arrowColor: '#3B82F6',
+                        calendarBackground: '#0B1120',
+                        textSectionTitleColor: '#64748B',
+                        selectedDayBackgroundColor: '#38BDF8',
+                        selectedDayTextColor: '#FFFFFF',
+                        todayTextColor: '#38BDF8',
+                        dayTextColor: '#E2E8F0',
+                        textDisabledColor: '#334155',
+                        monthTextColor: '#F1F5F9',
+                        arrowColor: '#38BDF8',
                         dotStyle: { width: 6, height: 6, borderRadius: 3 }
                     }}
                 />
@@ -739,7 +745,7 @@ const Bills = ({ navigation }) => {
                 <View style={[styles.header, styles.selectionHeader]}>
                     <View style={styles.headerLeft}>
                         <TouchableOpacity onPress={exitSelectionMode} style={styles.iconBtn}>
-                            <X size={24} color="#0F172A" />
+                            <X size={24} color="#E2E8F0" />
                         </TouchableOpacity>
                         <Text style={styles.selectionCount}>{selectedBills.size}</Text>
                     </View>
@@ -748,7 +754,7 @@ const Bills = ({ navigation }) => {
                             <Trash2 size={24} color="#DC2626" />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.iconBtn} onPress={handleBulkMarkPaid}>
-                            <Check size={24} color="#3B82F6" />
+                            <Check size={24} color="#38BDF8" />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -758,17 +764,17 @@ const Bills = ({ navigation }) => {
         return (
             <View style={styles.header}>
                 <TouchableOpacity style={styles.iconBtn}>
-                    <Menu size={24} color="#0F172A" />
+                    <Menu size={24} color="#E2E8F0" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Bills</Text>
                 <View style={styles.headerRight}>
                     {activeTab !== 'PAID' && (
                         <TouchableOpacity style={styles.iconBtn}>
-                            <SlidersHorizontal size={24} color="#3B82F6" />
+                            <SlidersHorizontal size={24} color="#38BDF8" />
                         </TouchableOpacity>
                     )}
                     <TouchableOpacity style={styles.iconBtn}>
-                        <Download size={24} color="#3B82F6" />
+                        <Download size={24} color="#38BDF8" />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -813,7 +819,7 @@ const Bills = ({ navigation }) => {
                 style={styles.fab}
                 onPress={() => navigation.navigate('EditTransaction', { mode: 'add', type: 'BILLS' })}
             >
-                <Plus size={32} color="#FFF" />
+                <Plus size={24} color="#FFF" />
             </TouchableOpacity>
             {/* Day Details Modal */}
             <Modal
@@ -880,7 +886,7 @@ const Bills = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FE'
+        backgroundColor: '#0B1120'
     },
     header: {
         flexDirection: 'row',
@@ -888,14 +894,14 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 20,
         paddingVertical: 16,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#0B1120',
         borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
+        borderBottomColor: '#1E293B',
     },
     headerTitle: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#0F172A',
+        color: '#F1F5F9',
         flex: 1,
         marginLeft: 16,
     },
@@ -912,21 +918,21 @@ const styles = StyleSheet.create({
         gap: 16,
     },
     selectionHeader: {
-        backgroundColor: '#F0F9FF', // Light blue background for active selection
+        backgroundColor: '#111827',
     },
     selectionCount: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#0F172A',
+        color: '#F1F5F9',
     },
     selectionInfoBar: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
         paddingVertical: 12,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#111827',
         borderBottomWidth: 1,
-        borderBottomColor: '#E2E8F0',
+        borderBottomColor: '#1E293B',
     },
     selectionInfoText: {
         fontSize: 16,
@@ -936,16 +942,16 @@ const styles = StyleSheet.create({
     selectionInfoAmount: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#0F172A',
+        color: '#F1F5F9',
     },
     billCardSelected: {
-        backgroundColor: '#FFF7ED', // Light orange/yellow selection context or just off-white
-        borderColor: '#3B82F6',
+        backgroundColor: '#38BDF815',
+        borderColor: '#38BDF8',
         borderWidth: 1,
     },
     tabsContainer: {
         flexDirection: 'row',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#0B1120',
         paddingHorizontal: 4,
     },
     tabItem: {
@@ -955,16 +961,16 @@ const styles = StyleSheet.create({
         borderBottomColor: 'transparent',
     },
     tabItemActive: {
-        borderBottomColor: '#2563EB',
+        borderBottomColor: '#38BDF8',
     },
     tabText: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#64748B',
+        color: '#475569',
         letterSpacing: 0.5,
     },
     tabTextActive: {
-        color: '#2563EB',
+        color: '#38BDF8',
     },
     content: {
         flex: 1,
@@ -974,7 +980,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 32,
-        marginTop: -60, // Visual offset to center visibly roughly in the open space
+        marginTop: -60,
     },
     iconContainer: {
         marginBottom: 24,
@@ -989,7 +995,7 @@ const styles = StyleSheet.create({
     },
     linkText: {
         fontSize: 14,
-        color: '#3B82F6',
+        color: '#38BDF8',
         fontWeight: '600',
         marginTop: 12,
     },
@@ -1000,20 +1006,21 @@ const styles = StyleSheet.create({
     },
     placeholderText: {
         fontSize: 16,
-        color: '#94A3B8',
+        color: '#64748B',
     },
     fab: {
         position: 'absolute',
-        bottom: 24,
-        right: 24,
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: '#3B82F6',
+        bottom: 80,
+        right: 20,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#38BDF8',
         justifyContent: 'center',
         alignItems: 'center',
-        elevation: 8, // Android
-        shadowColor: '#000', // iOS
+        elevation: 10,
+        zIndex: 999,
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
@@ -1021,12 +1028,12 @@ const styles = StyleSheet.create({
     // New styles for bills display
     billsScrollView: {
         flex: 1,
-        backgroundColor: '#F8F9FE',
+        backgroundColor: '#0B1120',
     },
     searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFF',
+        backgroundColor: '#111827',
         marginHorizontal: 16,
         marginTop: 16,
         marginBottom: 12,
@@ -1038,7 +1045,7 @@ const styles = StyleSheet.create({
     searchInput: {
         flex: 1,
         fontSize: 16,
-        color: '#0F172A',
+        color: '#F1F5F9',
     },
     monthGroup: {
         marginBottom: 8,
@@ -1049,26 +1056,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: '#F8F9FE',
+        backgroundColor: '#0B1120',
     },
     monthTitle: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#0F172A',
+        color: '#F1F5F9',
     },
     monthTotal: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#2563EB',
+        color: '#38BDF8',
     },
     billCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFF',
+        backgroundColor: '#111827',
         paddingHorizontal: 16,
         paddingVertical: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
+        borderBottomColor: '#1E293B',
     },
     billIconCircle: {
         width: 48,
@@ -1084,7 +1091,7 @@ const styles = StyleSheet.create({
     billCategory: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#0F172A',
+        color: '#E2E8F0',
         marginBottom: 4,
     },
     billDueText: {
@@ -1093,7 +1100,7 @@ const styles = StyleSheet.create({
     },
     billDateText: {
         fontSize: 12,
-        color: '#94A3B8',
+        color: '#475569',
         marginTop: 2,
     },
     billRight: {
@@ -1102,7 +1109,7 @@ const styles = StyleSheet.create({
     billAmount: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#0F172A',
+        color: '#F1F5F9',
         marginBottom: 4,
     },
     refreshBtn: {
@@ -1112,27 +1119,27 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: -2,
         right: -2,
-        backgroundColor: '#10B981', // Green
+        backgroundColor: '#10B981',
         borderRadius: 8,
         width: 16,
         height: 16,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1.5,
-        borderColor: '#FFF',
+        borderColor: '#111827',
     },
     // Calendar Styles
     calendarContainer: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#0B1120',
         flex: 1,
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'flex-end',
     },
     modalContent: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#111827',
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         maxHeight: '60%',
@@ -1144,12 +1151,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 20,
         borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
+        borderBottomColor: '#1E293B',
     },
     modalTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#0F172A',
+        color: '#F1F5F9',
     },
     closeBtn: {
         padding: 4,
@@ -1160,9 +1167,9 @@ const styles = StyleSheet.create({
     modalBillCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#1E293B',
         borderWidth: 1,
-        borderColor: '#E2E8F0',
+        borderColor: '#334155',
         borderRadius: 12,
         padding: 12,
         marginBottom: 12,
@@ -1185,17 +1192,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     emptyDayText: {
-        color: '#94A3B8',
+        color: '#64748B',
         fontSize: 14,
     },
     // Summary Styles
     summaryContainer: {
         flexDirection: 'row',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#111827',
         paddingVertical: 16,
         paddingHorizontal: 16,
         borderTopWidth: 1,
-        borderTopColor: '#F1F5F9',
+        borderTopColor: '#1E293B',
         justifyContent: 'space-between',
         alignItems: 'center',
     },
@@ -1206,12 +1213,12 @@ const styles = StyleSheet.create({
     summaryDivider: {
         width: 1,
         height: 32,
-        backgroundColor: '#E2E8F0',
+        backgroundColor: '#1E293B',
     },
     summaryAmount: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#0F172A',
+        color: '#F1F5F9',
         marginBottom: 4,
     },
     summaryLabelRow: {

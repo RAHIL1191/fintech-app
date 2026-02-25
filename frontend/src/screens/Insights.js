@@ -1678,7 +1678,7 @@ const Insights = () => {
 
             {/* Floating Add Button */}
             <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('EditTransaction', { mode: 'add' })}>
-                <Plus size={32} color="#FFF" />
+                <Plus size={24} color="#FFF" />
             </TouchableOpacity>
 
             {/* Daily Detail Modal */}
@@ -2519,7 +2519,7 @@ const styles = StyleSheet.create({
         color: '#FFF',
     },
     scrollContent: {
-        paddingBottom: 20,
+        paddingBottom: 80,
     },
     monthSelector: {
         flexDirection: 'row',
@@ -2689,21 +2689,20 @@ const styles = StyleSheet.create({
     },
     fab: {
         position: 'absolute',
-        bottom: 24,
-        right: 24,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#2DD4BF', // Teal-ish color from screenshot
+        bottom: 80,
+        right: 20,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#2DD4BF',
         justifyContent: 'center',
         alignItems: 'center',
-        elevation: 4,
+        elevation: 10,
+        zIndex: 999,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
-        borderWidth: 2,
-        borderColor: '#0F172A'
     },
     placeholderContainer: {
         flex: 1,

@@ -1,0 +1,22 @@
+node:fs:2426
+    return binding.writeFileUtf8(
+                   ^
+
+Error: EBUSY: resource busy or locked, open 'C:\Users\rahil\FinTech\backend\backend.log'
+    at Object.writeFileSync (node:fs:2426:20)
+    at Object.appendFileSync (node:fs:2508:6)
+    at logToFile (C:\Users\rahil\FinTech\backend\src\server.js:12:8)
+    at Object.<anonymous> (C:\Users\rahil\FinTech\backend\src\server.js:15:1)
+    at Module._compile (node:internal/modules/cjs/loader:1730:14)
+    at Object..js (node:internal/modules/cjs/loader:1895:10)
+    at Module.load (node:internal/modules/cjs/loader:1465:32)
+    at Function._load (node:internal/modules/cjs/loader:1282:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24) {
+  errno: -4082,
+  code: 'EBUSY',
+  syscall: 'open',
+  path: 'C:\\Users\\rahil\\FinTech\\backend\\backend.log'
+}
+
+Node.js v22.15.0

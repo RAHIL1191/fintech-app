@@ -134,21 +134,21 @@ const Dashboard = () => {
             <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Accounts')}>
                 <View style={styles.widgetHeader}>
                     <Text style={styles.widgetTitle}>Accounts</Text>
-                    <ChevronRight size={20} color="#3B82F6" />
+                    <ChevronRight size={20} color="#34D399" />
                 </View>
                 <View style={styles.accountsRow}>
                     <View style={styles.accountCol}>
                         <Text style={styles.accountLabel}>Cash</Text>
-                        <View style={[styles.accountIconCircle, { backgroundColor: '#FEE2E2' }]}>
-                            <Wallet size={24} color="#EF4444" />
+                        <View style={[styles.accountIconCircle, { backgroundColor: '#7C3AED20' }]}>
+                            <Wallet size={24} color="#A78BFA" />
                         </View>
                         <Text style={styles.accountAmount}>${cashTotal.toLocaleString()}</Text>
                     </View>
                     <View style={styles.accountDivider} />
                     <View style={styles.accountCol}>
                         <Text style={styles.accountLabel}>Credit</Text>
-                        <View style={[styles.accountIconCircle, { backgroundColor: '#DBEAFE' }]}>
-                            <CreditCard size={24} color="#3B82F6" />
+                        <View style={[styles.accountIconCircle, { backgroundColor: '#6366F120' }]}>
+                            <CreditCard size={24} color="#34D399" />
                         </View>
                         <Text style={styles.accountAmount}>${creditTotal.toLocaleString()}</Text>
                     </View>
@@ -163,22 +163,22 @@ const Dashboard = () => {
                 <Text style={styles.widgetTitle}>Bills</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={styles.widgetSubtitle}>{new Date().toLocaleString('default', { month: 'short' })}</Text>
-                    <ChevronRight size={20} color="#3B82F6" />
+                    <ChevronRight size={20} color="#34D399" />
                 </View>
             </View>
             <View style={styles.billsRow}>
                 <View style={styles.billStat}>
-                    <View style={[styles.billDot, { backgroundColor: '#F59E0B' }]} />
+                    <View style={[styles.billDot, { backgroundColor: '#FBBF24' }]} />
                     <Text style={styles.billStatLabel}>Upcoming</Text>
                     <Text style={styles.billStatValue}>${billsSummary.upcoming.toFixed(0)}</Text>
                 </View>
                 <View style={styles.billStat}>
-                    <View style={[styles.billDot, { backgroundColor: '#EF4444' }]} />
+                    <View style={[styles.billDot, { backgroundColor: '#F87171' }]} />
                     <Text style={styles.billStatLabel}>Overdue</Text>
                     <Text style={styles.billStatValue}>${billsSummary.overdue.toFixed(0)}</Text>
                 </View>
                 <View style={styles.billStat}>
-                    <View style={[styles.billDot, { backgroundColor: '#10B981' }]} />
+                    <View style={[styles.billDot, { backgroundColor: '#34D399' }]} />
                     <Text style={styles.billStatLabel}>Paid</Text>
                     <Text style={styles.billStatValue}>${billsSummary.paid.toFixed(0)}</Text>
                 </View>
@@ -196,13 +196,16 @@ const Dashboard = () => {
 
         let comparisonText = '';
         let comparisonColor = '#64748B';
+        let comparisonBg = 'transparent';
         if (prevMonthExpenses > 0) {
             if (diff < 0) {
                 comparisonText = `You're spending $${diffAbs.toFixed(0)} less than ${prevMonthName}`;
-                comparisonColor = '#10B981'; // Green
+                comparisonColor = '#34D399';
+                comparisonBg = '#34D39915';
             } else if (diff > 0) {
                 comparisonText = `You're spending $${diffAbs.toFixed(0)} more than ${prevMonthName}`;
-                comparisonColor = '#F59E0B'; // Amber warning
+                comparisonColor = '#FBBF24';
+                comparisonBg = '#FBBF2415';
             } else {
                 comparisonText = `Same spending as ${prevMonthName}`;
             }
@@ -212,7 +215,7 @@ const Dashboard = () => {
             <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Insights')}>
                 <View style={styles.widgetHeader}>
                     <Text style={styles.widgetTitle}>Top Expenses <Text style={styles.widgetSubtitle}>| {new Date().toLocaleString('default', { month: 'short' })}</Text></Text>
-                    <ChevronRight size={20} color="#3B82F6" />
+                    <ChevronRight size={20} color="#34D399" />
                 </View>
                 <View style={styles.expensesRow}>
                     {topExpenses.map((exp, idx) => {
@@ -231,7 +234,7 @@ const Dashboard = () => {
                     })}
                 </View>
                 {comparisonText ? (
-                    <Text style={[styles.comparisonText, { color: comparisonColor }]}>{comparisonText}</Text>
+                    <Text style={[styles.comparisonText, { color: comparisonColor, backgroundColor: comparisonBg }]}>{comparisonText}</Text>
                 ) : null}
             </TouchableOpacity>
         );
@@ -243,7 +246,7 @@ const Dashboard = () => {
             <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Budget')}>
                 <View style={styles.widgetHeader}>
                     <Text style={styles.widgetTitle}>Budget</Text>
-                    <ChevronRight size={20} color="#3B82F6" />
+                    <ChevronRight size={20} color="#34D399" />
                 </View>
                 {budgets.length === 0 ? (
                     <Text style={styles.emptyText}>No budgets for this month.</Text>
@@ -271,7 +274,7 @@ const Dashboard = () => {
                                             styles.budgetBar,
                                             {
                                                 width: `${Math.min(percent, 100)}%`,
-                                                backgroundColor: isOver ? '#EF4444' : '#3B82F6'
+                                                backgroundColor: isOver ? '#EF4444' : '#34D399'
                                             }
                                         ]}>
                                             <Text style={styles.budgetBarText}>
@@ -302,7 +305,7 @@ const Dashboard = () => {
             <TouchableOpacity style={styles.widgetCard} onPress={() => navigation.navigate('Insights')}>
                 <View style={styles.widgetHeader}>
                     <Text style={styles.widgetTitle}>Cash Flow</Text>
-                    <ChevronRight size={20} color="#3B82F6" />
+                    <ChevronRight size={20} color="#34D399" />
                 </View>
                 <View style={styles.cashFlowRow}>
                     <Text style={styles.cashFlowMonth}>{new Date().toLocaleString('default', { month: 'long' })}</Text>
@@ -311,8 +314,8 @@ const Dashboard = () => {
                     </Text>
                 </View>
                 <View style={styles.cashFlowBars}>
-                    <View style={[styles.cashFlowBar, { backgroundColor: '#10B981', flex: cashFlow.income || 1 }]} />
-                    <View style={[styles.cashFlowBar, { backgroundColor: '#F97316', flex: cashFlow.expenses || 1 }]} />
+                    <View style={[styles.cashFlowBar, { backgroundColor: '#34D399', flex: cashFlow.income || 1 }]} />
+                    <View style={[styles.cashFlowBar, { backgroundColor: '#FB923C', flex: cashFlow.expenses || 1 }]} />
                 </View>
                 <Text style={styles.projectedText}>Projected Balance of {netIsPositive ? '' : '-'}${Math.abs(cashFlow.net).toFixed(0)}</Text>
             </TouchableOpacity>
@@ -347,14 +350,14 @@ const Dashboard = () => {
     if (loading) {
         return (
             <SafeAreaView style={styles.container}>
-                <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 100 }} />
+                <ActivityIndicator size="large" color="#34D399" style={{ marginTop: 100 }} />
             </SafeAreaView>
         );
     }
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <StatusBar barStyle="dark-content" />
+            <StatusBar barStyle="light-content" />
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -367,7 +370,7 @@ const Dashboard = () => {
                         <Text style={styles.userName}>Rahil</Text>
                     </View>
                     <TouchableOpacity style={styles.searchBtn} onPress={() => navigation.navigate('SearchScreen')}>
-                        <Search size={22} color="#0F172A" />
+                        <Search size={22} color="#34D399" />
                     </TouchableOpacity>
                 </View>
 
@@ -379,7 +382,7 @@ const Dashboard = () => {
                 {renderBudgetWidget()}
                 {renderCashFlowWidget()}
 
-                <View style={{ height: 40 }} />
+                <View style={{ height: 80 }} />
             </ScrollView>
 
             <AlertsModal
@@ -395,63 +398,73 @@ const Dashboard = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F0F9FF',
+        backgroundColor: '#0B1120',
     },
     scrollContent: {
         padding: 16,
+        paddingBottom: 80,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 24,
+        paddingTop: 4,
     },
     greeting: {
-        fontSize: 16,
+        fontSize: 15,
         color: '#64748B',
+        fontWeight: '500',
+        letterSpacing: 0.3,
     },
     userName: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#0F172A',
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#F1F5F9',
+        letterSpacing: -0.5,
     },
     searchBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#FFF',
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        backgroundColor: '#1E293B',
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 3,
     },
     widgetCard: {
-        backgroundColor: '#FFF',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 16,
+        backgroundColor: '#111827',
+        borderRadius: 20,
+        padding: 18,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: '#1E293B',
         shadowColor: '#000',
-        shadowOpacity: 0.03,
-        shadowRadius: 6,
-        elevation: 1,
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
     },
     widgetHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 14,
     },
     widgetTitle: {
-        fontSize: 16,
+        fontSize: 17,
         fontWeight: '700',
-        color: '#0F172A',
+        color: '#F1F5F9',
+        letterSpacing: -0.2,
     },
     widgetSubtitle: {
         fontSize: 14,
         color: '#64748B',
-        fontWeight: '400',
+        fontWeight: '500',
     },
     // Accounts
     accountsRow: {
@@ -464,26 +477,29 @@ const styles = StyleSheet.create({
     },
     accountDivider: {
         width: 1,
-        height: 60,
-        backgroundColor: '#E2E8F0',
+        height: 64,
+        backgroundColor: '#1E293B',
     },
     accountLabel: {
         fontSize: 12,
         color: '#64748B',
         marginBottom: 8,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
     },
     accountIconCircle: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
+        width: 52,
+        height: 52,
+        borderRadius: 26,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 10,
     },
     accountAmount: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#0F172A',
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#F1F5F9',
     },
     // Bills
     billsRow: {
@@ -494,19 +510,21 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     billDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginBottom: 4,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        marginBottom: 6,
     },
     billStatLabel: {
         fontSize: 12,
         color: '#64748B',
+        fontWeight: '500',
     },
     billStatValue: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#0F172A',
+        fontSize: 17,
+        fontWeight: '800',
+        color: '#F1F5F9',
+        marginTop: 2,
     },
     // Top Expenses
     expensesRow: {
@@ -515,37 +533,42 @@ const styles = StyleSheet.create({
     expenseItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 10,
     },
     expenseIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 8,
+        width: 36,
+        height: 36,
+        borderRadius: 10,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 10,
+        marginRight: 12,
     },
     expenseName: {
         flex: 1,
         fontSize: 14,
-        color: '#0F172A',
+        color: '#E2E8F0',
+        fontWeight: '500',
     },
     expenseAmount: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#0F172A',
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#F1F5F9',
     },
     totalText: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#0F172A',
+        color: '#F1F5F9',
         marginTop: 4,
     },
     comparisonText: {
         fontSize: 12,
-        marginTop: 6,
-        fontWeight: '500',
+        marginTop: 8,
+        fontWeight: '600',
         textAlign: 'center',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        overflow: 'hidden',
     },
     // Budget
     budgetItem: {
@@ -557,63 +580,66 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     budgetIconCircle: {
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        backgroundColor: '#DBEAFE',
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        backgroundColor: '#34D39920',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 10,
     },
     budgetIconText: {
         fontSize: 16,
-        fontWeight: '700',
-        color: '#3B82F6',
+        fontWeight: '800',
+        color: '#34D399',
     },
     budgetName: {
         flex: 1,
         fontSize: 15,
         fontWeight: '600',
-        color: '#0F172A',
+        color: '#E2E8F0',
     },
     budgetLimitAmount: {
         fontSize: 15,
         fontWeight: '700',
-        color: '#0F172A',
+        color: '#F1F5F9',
     },
     budgetBarContainer: {
         marginBottom: 4,
     },
     budgetBarBg: {
-        height: 24,
-        backgroundColor: '#E2E8F0',
-        borderRadius: 6,
+        height: 26,
+        backgroundColor: '#1E293B',
+        borderRadius: 8,
         overflow: 'hidden',
     },
     budgetBar: {
         height: '100%',
-        borderRadius: 6,
+        borderRadius: 8,
         justifyContent: 'center',
-        paddingHorizontal: 8,
+        paddingHorizontal: 10,
         minWidth: 100,
     },
     budgetBarText: {
         fontSize: 11,
-        fontWeight: '600',
+        fontWeight: '700',
         color: '#FFF',
     },
     budgetFooterRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        marginTop: 2,
     },
     budgetPercent: {
         fontSize: 12,
         color: '#64748B',
+        fontWeight: '600',
     },
     budgetMonth: {
         fontSize: 12,
         color: '#64748B',
+        fontWeight: '500',
     },
     emptyText: {
         fontSize: 13,
@@ -626,45 +652,50 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 10,
     },
     cashFlowMonth: {
-        fontSize: 14,
-        color: '#0F172A',
+        fontSize: 15,
+        color: '#E2E8F0',
+        fontWeight: '600',
     },
     cashFlowNet: {
-        fontSize: 16,
-        fontWeight: '700',
+        fontSize: 18,
+        fontWeight: '800',
     },
     positive: {
-        color: '#10B981',
+        color: '#34D399',
     },
     negative: {
-        color: '#EF4444',
+        color: '#F87171',
     },
     cashFlowBars: {
         flexDirection: 'row',
-        height: 8,
-        borderRadius: 4,
+        height: 10,
+        borderRadius: 5,
         overflow: 'hidden',
-        marginBottom: 8,
+        marginBottom: 10,
+        gap: 2,
     },
     cashFlowBar: {
         height: '100%',
+        borderRadius: 5,
     },
     projectedText: {
         fontSize: 12,
         color: '#64748B',
         textAlign: 'center',
+        fontWeight: '500',
     },
     // Alert Widget
     alertWidget: {
-        backgroundColor: '#3f1717', // Dark Red/Brown tint
+        backgroundColor: '#450a0a',
         borderColor: '#7f1d1d',
+        borderWidth: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 16,
+        marginBottom: 14,
     },
     alertContent: {
         flexDirection: 'row',
@@ -673,19 +704,19 @@ const styles = StyleSheet.create({
     },
     alertIconBadge: {
         backgroundColor: '#ef4444',
-        padding: 8,
-        borderRadius: 20,
+        padding: 10,
+        borderRadius: 22,
         position: 'relative',
     },
     redDot: {
         position: 'absolute',
-        top: 0,
-        right: 0,
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+        top: -1,
+        right: -1,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
         backgroundColor: '#fff',
-        borderWidth: 1,
+        borderWidth: 1.5,
         borderColor: '#ef4444',
     },
     alertTextContainer: {
@@ -694,7 +725,7 @@ const styles = StyleSheet.create({
     alertTitle: {
         color: '#fca5a5',
         fontWeight: 'bold',
-        fontSize: 14,
+        fontSize: 15,
     },
     alertSubtitle: {
         color: '#fecaca',

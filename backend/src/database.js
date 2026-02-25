@@ -29,7 +29,16 @@ class DatabaseManager {
             console.log('Database: Using PostgreSQL (Neon)');
             this.pool = new Pool({
                 connectionString: databaseUrl,
-                ssl: { rejectUnauthorized: false } // Required for Neon
+                ssl: { rejectUnauthorized: false }, // Required for Neon
+                max: 5,                      // Limit concurrent connections
+                idleTimeoutMillis: 30000,    // Close idle connections after 30s (Neon terminates them anyway)
+                connectionTimeoutMillis: 10000, // Timeout if can't connect in 10s
+                keepAlive: true,             // Send TCP keepalive to prevent premature termination
+                keepAliveInitialDelayMillis: 10000
+            });
+            // Handle unexpected pool errors gracefully (Neon can drop idle connections)
+            this.pool.on('error', (err) => {
+                console.warn('Postgres pool background error (will reconnect):', err.message);
             });
             this.isPostgres = true;
         } else {

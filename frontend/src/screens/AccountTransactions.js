@@ -84,7 +84,7 @@ const AccountTransactions = ({ route, navigation }) => {
     const fetchTransactions = async () => {
         setLoading(true);
         try {
-            const response = await api.get('/transactions');
+            const response = await api.get('/transactions', { params: { sync: 'true' } });
             const txs = response.data.transactions?.filter(
                 t => t.account_id === account.account_id
             ) || [];

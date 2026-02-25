@@ -44,9 +44,8 @@ const AccountDetails = ({ route, navigation }) => {
     const fetchAccountTransactions = async () => {
         setLoading(true);
         try {
-            // Note: In a real app, you'd filter by account_id on the backend
-            // Backend uses stored tokens
-            const response = await api.get('/transactions');
+            // Force sync to get freshest transactions from Plaid
+            const response = await api.get('/transactions', { params: { sync: 'true' } });
 
             // Filter transactions for this specific account
             const accountTransactions = response.data.transactions?.filter(

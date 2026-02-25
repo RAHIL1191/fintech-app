@@ -596,7 +596,11 @@ app.get('/api/accounts', async (req, res) => {
 
             const now = new Date();
             const endDate = now.toISOString().split('T')[0];
-            const startDate = '2023-01-01'; // Default range matching /transactions endpoint
+
+            // Use rolling 6-month window to match /api/transactions endpoint
+            const startObj = new Date();
+            startObj.setMonth(startObj.getMonth() - 6);
+            const startDate = startObj.toISOString().split('T')[0];
 
             const promises = itemsToFetchFromPlaid.map(async (item) => {
                 try {
@@ -607,34 +611,65 @@ app.get('/api/accounts', async (req, res) => {
                             access_token: item.access_token,
                             start_date: startDate,
                             end_date: endDate,
-                            options: { count: 100, offset: 0 }
+                            options: { count: 500, offset: 0 }
                         })
                     ]);
 
                     // Handle Accounts Response
                     let accounts = [];
+                    let itemError = null; // New: capture item-level error from Plaid
+
                     if (accountsResponse.status === 'fulfilled') {
                         accounts = accountsResponse.value.data.accounts;
+                        const plaidItem = accountsResponse.value.data.item;
+
+                        // Check for Item Error (e.g. LOGIN_REQUIRED)
+                        if (plaidItem && plaidItem.error) {
+                            console.error(`Plaid Item Error for ${item.institution_name}:`, plaidItem.error);
+                            itemError = plaidItem.error.error_code;
+                        }
+
                         await db.upsertAccounts(accounts, item.item_id);
                     } else {
                         throw accountsResponse.reason; // Re-throw to handle in outer catch for error object creation
                     }
 
                     // Handle Transactions Response (Log error but don't fail the request)
+                    let transactionError = null;
                     if (transactionsResponse.status === 'fulfilled') {
                         const transactions = transactionsResponse.value.data.transactions;
+                        const txItem = transactionsResponse.value.data.item; // Get item from transaction response
+
                         if (transactions && transactions.length > 0) {
                             console.log(`Synced ${transactions.length} transactions for ${item.institution_name}`);
                             await db.upsertTransactions(transactions, item.item_id);
                         }
+
+                        // Check for stale data (silent failure) in transactions response
+                        if (txItem && txItem.transactions_last_successful_update) {
+                            const lastSuccess = new Date(txItem.transactions_last_successful_update);
+                            const hoursSinceUpdate = (new Date() - lastSuccess) / (1000 * 60 * 60);
+
+                            // Debug log to confirm we see the timestamp
+                            console.log(`[Item Check] ${item.institution_name} last tx success: ${lastSuccess.toISOString()} (${hoursSinceUpdate.toFixed(1)}h ago)`);
+
+                            if (hoursSinceUpdate > 24) {
+                                console.warn(`Stale transactions detected for ${item.institution_name}`);
+                                transactionError = 'TRANSACTIONS_STALE';
+                            }
+                        }
                     } else {
-                        console.error(`Warning: Failed to sync transactions for ${item.institution_name}:`, transactionsResponse.reason.message);
+                        const err = transactionsResponse.reason;
+                        console.error(`Warning: Failed to sync transactions for ${item.institution_name}:`, err.message);
+                        transactionError = err.response?.data?.error_code || 'SYNC_ERROR';
                     }
 
                     return accounts.map(a => ({
                         ...a,
                         item_id: item.item_id,
-                        institution_name: item.institution_name
+                        institution_name: item.institution_name,
+                        transaction_error_code: transactionError,
+                        item_error_code: itemError // Propagate item error
                     }));
 
                 } catch (err) {
@@ -678,16 +713,6 @@ app.get('/api/accounts', async (req, res) => {
     }
 });
 
-// Fetch Accounts
-app.get('/api/accounts', async (req, res) => {
-    try {
-        const accounts = await db.getAllAccounts();
-        res.json({ accounts });
-    } catch (error) {
-        console.error('Error fetching accounts:', error);
-        res.status(500).json({ error: 'Failed to fetch accounts' });
-    }
-});
 
 // Fetch Merchants (Unique list)
 app.get('/api/merchants', async (req, res) => {

@@ -116,15 +116,15 @@ const Budget = ({ navigation }) => {
     const renderHeader = () => (
         <View style={styles.header}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.openDrawer()}>
-                <Menu size={24} color="#0F172A" />
+                <Menu size={24} color="#E2E8F0" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Budget</Text>
             <View style={styles.headerRight}>
                 <TouchableOpacity style={styles.iconBtn}>
-                    <AlignJustify size={24} color="#3B82F6" />
+                    <AlignJustify size={24} color="#F472B6" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('CreateBudget')}>
-                    <Plus size={24} color="#3B82F6" />
+                    <Plus size={24} color="#F472B6" />
                 </TouchableOpacity>
             </View>
         </View>
@@ -165,11 +165,11 @@ const Budget = ({ navigation }) => {
             </View>
 
             <View style={styles.monthSelector}>
-                <TouchableOpacity onPress={handlePrevMonth}><ChevronLeft size={20} color="#64748B" /></TouchableOpacity>
+                <TouchableOpacity onPress={handlePrevMonth}><ChevronLeft size={20} color="#94A3B8" /></TouchableOpacity>
                 <Text style={styles.monthText}>
                     {currentDate.toLocaleString('en-US', { month: 'short', year: 'numeric' })}
                 </Text>
-                <TouchableOpacity onPress={handleNextMonth}><ChevronRight size={20} color="#64748B" /></TouchableOpacity>
+                <TouchableOpacity onPress={handleNextMonth}><ChevronRight size={20} color="#94A3B8" /></TouchableOpacity>
             </View>
         </View>
     );
@@ -189,7 +189,7 @@ const Budget = ({ navigation }) => {
                     <View style={styles.progressBarBackground}>
                         <View style={[styles.progressBarFill, {
                             width: overallLimit > 0 ? `${Math.min((overallSpent / overallLimit) * 100, 100)}%` : '0%',
-                            backgroundColor: overallSpent > overallLimit ? '#DC2626' : '#E2E8F0'
+                            backgroundColor: overallSpent > overallLimit ? '#EF4444' : '#334155'
                         }]} />
                     </View>
                     <View style={styles.progressTextOverlay}>
@@ -214,7 +214,7 @@ const Budget = ({ navigation }) => {
                         <View style={styles.modalHeader}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={styles.modalTitle}>Overall Progress</Text>
-                                <AlertCircle size={16} color="#3B82F6" style={{ marginLeft: 6 }} />
+                                <AlertCircle size={16} color="#F472B6" style={{ marginLeft: 6 }} />
                             </View>
                             <TouchableOpacity onPress={() => setShowProgressModal(false)}>
                                 <X size={24} color="#64748B" />
@@ -235,7 +235,7 @@ const Budget = ({ navigation }) => {
                                         <View style={styles.modalBudgetHeader}>
                                             <View style={styles.budgetLeft}>
                                                 <View style={styles.iconCircle}>
-                                                    <Icon size={24} color="#3B82F6" />
+                                                    <Icon size={24} color="#F472B6" />
                                                 </View>
                                                 <Text style={styles.budgetName}>{budget.name}</Text>
                                             </View>
@@ -254,7 +254,7 @@ const Budget = ({ navigation }) => {
 
                                         <View style={[styles.itemProgressContainer, { marginTop: 8 }]}>
                                             <View style={[styles.itemProgressBar, {
-                                                backgroundColor: isOver ? '#EF4444' : '#3B82F6',
+                                                backgroundColor: isOver ? '#EF4444' : '#F472B6',
                                                 width: '100%',
                                             }]}>
                                                 <Text style={styles.itemProgressText}>Spent ${budget.spent?.toFixed(0) || 0} of ${budget.limit?.toFixed(0) || 0}</Text>
@@ -295,7 +295,7 @@ const Budget = ({ navigation }) => {
                 <View style={styles.budgetHeader}>
                     <View style={styles.budgetLeft}>
                         <View style={styles.iconCircle}>
-                            <Icon size={24} color="#3B82F6" />
+                            <Icon size={24} color="#F472B6" />
                         </View>
                         <Text style={styles.budgetName}>{item.name}</Text>
                     </View>
@@ -307,7 +307,7 @@ const Budget = ({ navigation }) => {
                 {/* Progress Bar */}
                 <View style={styles.itemProgressContainer}>
                     <View style={[styles.itemProgressBar, {
-                        backgroundColor: isOver ? '#EF4444' : '#3B82F6',
+                        backgroundColor: isOver ? '#EF4444' : '#F472B6',
                         width: '100%', // Fix logic: width should be 100%, visual fill inside? 
                         // The component in picture looks like a solid bar with text INSIDE
                     }]}>
@@ -325,7 +325,7 @@ const Budget = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={{ backgroundColor: '#fff' }}>
+            <View style={{ backgroundColor: '#0B1120' }}>
                 {renderHeader()}
                 {renderTabs()}
             </View>
@@ -337,12 +337,12 @@ const Budget = ({ navigation }) => {
                     {renderOverallProgress()}
 
                     {loading ? (
-                        <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 40 }} />
+                        <ActivityIndicator size="large" color="#F472B6" style={{ marginTop: 40 }} />
                     ) : budgets.length === 0 ? (
                         <View style={{ alignItems: 'center', marginTop: 40 }}>
                             <Text style={{ fontSize: 16, color: '#64748B', marginBottom: 8 }}>No budgets yet</Text>
                             <TouchableOpacity
-                                style={{ backgroundColor: '#3B82F6', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }}
+                                style={{ backgroundColor: '#F472B6', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }}
                                 onPress={() => navigation.navigate('CreateBudget')}
                             >
                                 <Text style={{ color: '#FFF', fontWeight: '600' }}>Create Your First Budget</Text>
@@ -360,16 +360,16 @@ const Budget = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8F9FE' },
+    container: { flex: 1, backgroundColor: '#0B1120' },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: '#fff',
+        backgroundColor: '#0B1120',
     },
-    headerTitle: { fontSize: 20, fontWeight: '600', color: '#0F172A' },
+    headerTitle: { fontSize: 20, fontWeight: '600', color: '#F1F5F9' },
     headerRight: { flexDirection: 'row', gap: 12 },
     iconBtn: { padding: 4 },
 
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         paddingHorizontal: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#E2E8F0',
+        borderBottomColor: '#1E293B',
     },
     tabItem: {
         paddingVertical: 12,
@@ -387,19 +387,19 @@ const styles = StyleSheet.create({
         borderBottomColor: 'transparent',
     },
     activeTabItem: {
-        borderBottomColor: '#3B82F6',
+        borderBottomColor: '#F472B6',
     },
     tabText: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#64748B',
+        color: '#475569',
     },
     activeTabText: {
-        color: '#0F172A',
+        color: '#F1F5F9',
     },
 
     scrollView: { flex: 1 },
-    contentPadding: { padding: 16 },
+    contentPadding: { padding: 16, paddingBottom: 80 },
 
     // Controls
     controlsRow: {
@@ -412,10 +412,7 @@ const styles = StyleSheet.create({
     },
     toggleContainer: {
         flexDirection: 'row',
-        backgroundColor: '#E2E8F0', // Slightly darker bg for toggle track? 
-        // Based on pic, it looks like simple text or light pill?
-        // Let's use light blue pill style
-        backgroundColor: '#EFF6FF',
+        backgroundColor: '#1E293B',
         borderRadius: 20,
         padding: 4,
     },
@@ -425,39 +422,37 @@ const styles = StyleSheet.create({
         borderRadius: 16,
     },
     activeToggleBtn: {
-        backgroundColor: '#BFDBFE', // Light blue selection
-        // Actually picture has "Expenses" selected with blue background
-        backgroundColor: '#DBEAFE',
+        backgroundColor: '#F472B630',
     },
     toggleText: { fontSize: 13, color: '#64748B', fontWeight: '500' },
-    activeToggleText: { color: '#1E40AF', fontWeight: '600' },
+    activeToggleText: { color: '#F472B6', fontWeight: '600' },
 
     monthSelector: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
     },
-    monthText: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+    monthText: { fontSize: 14, fontWeight: '700', color: '#F1F5F9' },
 
     // Overall Card
     card: {
-        backgroundColor: '#fff',
+        backgroundColor: '#111827',
         borderRadius: 16,
         padding: 16,
         marginBottom: 24,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
+        borderColor: '#1E293B',
     },
     cardHeaderRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginBottom: 12,
     },
-    cardTitle: { fontSize: 16, fontWeight: '600', color: '#334155' },
-    cardAmount: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+    cardTitle: { fontSize: 16, fontWeight: '600', color: '#E2E8F0' },
+    cardAmount: { fontSize: 16, fontWeight: '700', color: '#F1F5F9' },
     progressBarContainer: {
         height: 24,
-        backgroundColor: '#F1F5F9', // Light gray background
+        backgroundColor: '#1E293B',
         borderRadius: 12,
         overflow: 'hidden',
         justifyContent: 'center',
@@ -465,11 +460,11 @@ const styles = StyleSheet.create({
     },
     progressBarBackground: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#E2E8F0',
+        backgroundColor: '#1E293B',
     },
     progressBarFill: {
         height: '100%',
-        borderRadius: 12, // Match container
+        borderRadius: 12,
     },
     progressTextOverlay: {
         position: 'absolute',
@@ -479,11 +474,9 @@ const styles = StyleSheet.create({
     progressTextInner: {
         fontSize: 12,
         fontWeight: '600',
-        color: '#475569', // Dark text on light bar?
-        // If bar is red, text might need to be white?
-        // In picture, "Spent $0 of $0" is inside a gray bar.
+        color: '#94A3B8',
     },
-    helperText: { fontSize: 12, color: '#94A3B8' },
+    helperText: { fontSize: 12, color: '#64748B' },
 
     // Budget Item
     budgetItem: {
@@ -500,16 +493,16 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: '#EFF6FF',
+        backgroundColor: '#F472B620',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    budgetName: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
-    budgetRemaining: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+    budgetName: { fontSize: 16, fontWeight: '600', color: '#E2E8F0' },
+    budgetRemaining: { fontSize: 16, fontWeight: '700', color: '#F1F5F9' },
 
     itemProgressContainer: {
         height: 28,
-        backgroundColor: '#E2E8F0', // Fallback
+        backgroundColor: '#1E293B',
         borderRadius: 14,
         marginBottom: 4,
         overflow: 'hidden',
@@ -536,11 +529,11 @@ const styles = StyleSheet.create({
     // Modal Styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: '#F8F9FE',
+        backgroundColor: '#0B1120',
     },
     modalContent: {
         flex: 1,
-        backgroundColor: '#FFF',
+        backgroundColor: '#111827',
         paddingTop: 50,
         paddingHorizontal: 20,
     },
@@ -553,7 +546,7 @@ const styles = StyleSheet.create({
     modalTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#3B82F6',
+        color: '#F472B6',
     },
     modalSubtitle: {
         fontSize: 14,
@@ -563,7 +556,7 @@ const styles = StyleSheet.create({
     modalBudgetItem: {
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
+        borderBottomColor: '#1E293B',
     },
     modalBudgetHeader: {
         flexDirection: 'row',
@@ -575,14 +568,14 @@ const styles = StyleSheet.create({
         height: 24,
         borderRadius: 4,
         borderWidth: 2,
-        borderColor: '#CBD5E1',
+        borderColor: '#475569',
         marginLeft: 12,
         alignItems: 'center',
         justifyContent: 'center',
     },
     checkboxSelected: {
-        backgroundColor: '#3B82F6',
-        borderColor: '#3B82F6',
+        backgroundColor: '#F472B6',
+        borderColor: '#F472B6',
     },
 
 });

@@ -53,9 +53,9 @@ const PlaidLink = ({ onSuccess }) => {
         }
     };
 
-    const openNativeLink = () => {
+    const openNativeLink = async () => {
         try {
-            create({ token: linkToken });
+            await create({ token: linkToken });
             open({
                 onSuccess: async (linkSuccess) => {
                     console.log('Plaid Link Success Metadata (Native):', linkSuccess);

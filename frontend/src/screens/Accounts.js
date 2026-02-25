@@ -22,7 +22,8 @@ import {
     Bell,
     MoreVertical,
     Menu,
-    AlertCircle
+    AlertCircle,
+    AlertTriangle
 } from 'lucide-react-native';
 import { create, open } from 'react-native-plaid-link-sdk';
 import PlaidLink from '../components/PlaidLink';
@@ -182,7 +183,7 @@ const Accounts = ({ navigation }) => {
             const linkToken = response.data.link_token;
 
             // 2. Open Plaid Link
-            create({ token: linkToken });
+            await create({ token: linkToken });
             open({
                 token: linkToken,
                 onSuccess: (success) => {
@@ -237,17 +238,40 @@ const Accounts = ({ navigation }) => {
 
     const filteredAccounts = getFilteredAccounts();
 
-    // Group filtered accounts by institution
-    const groupedAccounts = filteredAccounts.reduce((groups, account) => {
-        const rawName = account.institution_name || 'Bank Account';
-        const institutionName = getShortInstitutionName(rawName);
-
-        if (!groups[institutionName]) {
-            groups[institutionName] = [];
+    // Group filtered accounts by item_id (each Plaid connection gets its own card)
+    const groupedByItem = filteredAccounts.reduce((groups, account) => {
+        const key = account.item_id || account.institution_name || 'unknown';
+        if (!groups[key]) {
+            groups[key] = [];
         }
-        groups[institutionName].push(account);
+        groups[key].push(account);
         return groups;
     }, {});
+
+    // Custom nicknames for Plaid items with the same institution
+    const itemNicknames = {
+        'imported_item_1766208385159': 'Rahil',
+        'JqJkDx968Ptp1N5wzOgeUdQV0OzokOtbXMvwq': 'Apeksha',
+    };
+
+    // Build display names, using nicknames when institution names collide
+    const institutionCount = {};
+    const itemEntries = Object.entries(groupedByItem);
+    for (const [, accs] of itemEntries) {
+        const rawName = accs[0]?.institution_name || 'Bank Account';
+        const shortName = getShortInstitutionName(rawName);
+        institutionCount[shortName] = (institutionCount[shortName] || 0) + 1;
+    }
+    const groupedAccounts = {};
+    for (const [itemId, accs] of itemEntries) {
+        const rawName = accs[0]?.institution_name || 'Bank Account';
+        const shortName = getShortInstitutionName(rawName);
+        let displayName = shortName;
+        if (institutionCount[shortName] > 1 && itemNicknames[itemId]) {
+            displayName = `${shortName} ${itemNicknames[itemId]}`;
+        }
+        groupedAccounts[displayName] = accs;
+    }
 
     const displayBalance = filteredAccounts.reduce((sum, acc) => {
         const balance = acc.balances.current || 0;
@@ -297,7 +321,7 @@ const Accounts = ({ navigation }) => {
         <SafeAreaView style={styles.container}>
             {/* Top Toolbar */}
             <View style={styles.toolbar}>
-                <TouchableOpacity><Menu size={24} color="#1A1A1A" /></TouchableOpacity>
+                <TouchableOpacity><Menu size={24} color="#E2E8F0" /></TouchableOpacity>
                 <Text style={styles.toolbarTitle}>Accounts</Text>
                 <View style={styles.toolbarRight}>
                 </View>
@@ -338,7 +362,7 @@ const Accounts = ({ navigation }) => {
                                 <Switch
                                     value={includeMortgage}
                                     onValueChange={setIncludeMortgage}
-                                    trackColor={{ false: '#E5E7EB', true: '#6366F1' }}
+                                    trackColor={{ false: '#1E293B', true: '#6366F1' }}
                                     thumbColor="#FFF"
                                 />
                             </View>
@@ -358,7 +382,7 @@ const Accounts = ({ navigation }) => {
 
                 {/* Account Groups */}
                 {loading && accounts.length === 0 ? (
-                    <ActivityIndicator size="large" color="#6366F1" style={{ marginTop: 40 }} />
+                    <ActivityIndicator size="large" color="#22D3EE" style={{ marginTop: 40 }} />
                 ) : (
                     Object.entries(groupedAccounts).map(([name, groupAccounts]) => {
                         const isExpanded = !!expandedGroups[name];
@@ -392,7 +416,7 @@ const Accounts = ({ navigation }) => {
 
                                     <View style={styles.bankHeaderRight}>
                                         <View style={{ alignItems: 'flex-end', marginRight: 12 }}>
-                                            <Text style={[styles.bankTotal, { color: groupTotal < 0 ? '#EF4444' : '#6366F1' }]}>
+                                            <Text style={[styles.bankTotal, { color: groupTotal < 0 ? '#F87171' : '#22D3EE' }]}>
                                                 {formatCurrency(groupTotal)}
                                             </Text>
                                             <Text style={styles.bankStatus}>Current Balance</Text>
@@ -421,13 +445,16 @@ const Accounts = ({ navigation }) => {
                                                         <Text style={styles.accountItemName}>{acc.name}</Text>
                                                         {(() => {
                                                             const hasError = !!acc.error_code;
+                                                            // Show yellow warning for transaction sync failure OR item-level warning (e.g. login required but balance worked)
+                                                            const hasTxError = !!acc.transaction_error_code || !!acc.item_error_code;
                                                             if (hasError) return <AlertCircle size={14} color="#EF4444" style={{ marginLeft: 6 }} />;
+                                                            if (hasTxError) return <AlertTriangle size={14} color="#F59E0B" style={{ marginLeft: 6 }} />;
                                                             return null;
                                                         })()}
                                                     </View>
                                                     <Text style={styles.accountItemType}>{acc.subtype || acc.type} •••• {acc.mask}</Text>
                                                 </View>
-                                                <Text style={[styles.accountItemBalance, { color: (acc.type === 'credit' || acc.type === 'loan') ? '#EF4444' : '#1A1A1A' }]}>
+                                                <Text style={[styles.accountItemBalance, { color: (acc.type === 'credit' || acc.type === 'loan') ? '#F87171' : '#F1F5F9' }]}>
                                                     {formatCurrency(acc.balances.current)}
                                                 </Text>
                                             </TouchableOpacity>
@@ -451,21 +478,21 @@ const Accounts = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#0B1120',
     },
     toolbar: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 20,
         paddingVertical: 12,
-        backgroundColor: '#FFF',
+        backgroundColor: '#0B1120',
     },
     toolbarTitle: {
         flex: 1,
         textAlign: 'left',
         fontSize: 28,
         fontWeight: '800',
-        color: '#1A1A1A',
+        color: '#F1F5F9',
         marginLeft: 10,
     },
     toolbarRight: {
@@ -476,7 +503,7 @@ const styles = StyleSheet.create({
         marginLeft: 16,
     },
     scrollContent: {
-        paddingBottom: 40,
+        paddingBottom: 80,
     },
     navScroll: {
         paddingHorizontal: 16,
@@ -489,15 +516,15 @@ const styles = StyleSheet.create({
         borderRadius: 20,
     },
     activeFilterTab: {
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#1E293B',
     },
     filterTabText: {
         fontSize: 12,
         fontWeight: '600',
-        color: '#9CA3AF',
+        color: '#475569',
     },
     activeFilterTabText: {
-        color: '#1A1A1A',
+        color: '#22D3EE',
     },
     netWorthCard: {
         paddingHorizontal: 24,
@@ -511,11 +538,11 @@ const styles = StyleSheet.create({
     netWorthAmount: {
         fontSize: 32,
         fontWeight: '800',
-        color: '#1A1A1A',
+        color: '#F1F5F9',
     },
     netWorthChange: {
         fontSize: 14,
-        color: '#9CA3AF',
+        color: '#64748B',
         marginTop: 4,
     },
     mortgageToggleContainer: {
@@ -523,7 +550,7 @@ const styles = StyleSheet.create({
     },
     mortgageToggleLabel: {
         fontSize: 10,
-        color: '#9CA3AF',
+        color: '#64748B',
         fontWeight: '700',
         textTransform: 'uppercase',
         marginBottom: 4,
@@ -538,31 +565,31 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         marginRight: 10,
         borderRadius: 8,
-        backgroundColor: '#F9FAFB',
+        backgroundColor: '#111827',
     },
     activeTimeBtn: {
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#1E293B',
     },
     timeBtnText: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#6B7280',
+        color: '#475569',
     },
     activeTimeBtnText: {
-        color: '#1A1A1A',
+        color: '#E2E8F0',
     },
     bankCard: {
         marginHorizontal: 16,
-        marginBottom: 16,
-        backgroundColor: '#FFF',
+        marginBottom: 14,
+        backgroundColor: '#111827',
         borderRadius: 20,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: '#1E293B',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
+        shadowOpacity: 0.15,
         shadowRadius: 8,
-        elevation: 2,
+        elevation: 3,
         overflow: 'hidden',
     },
     bankHeader: {
@@ -581,7 +608,7 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 12,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: '#22D3EE20',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
@@ -589,16 +616,16 @@ const styles = StyleSheet.create({
     bankIconText: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#6366F1',
+        color: '#22D3EE',
     },
     bankName: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#1A1A1A',
+        color: '#F1F5F9',
     },
     bankSubtext: {
         fontSize: 12,
-        color: '#9CA3AF',
+        color: '#64748B',
         marginTop: 2,
     },
     bankHeaderRight: {
@@ -608,23 +635,23 @@ const styles = StyleSheet.create({
     bankTotal: {
         fontSize: 18,
         fontWeight: '800',
-        color: '#6366F1',
+        color: '#22D3EE',
     },
     bankStatus: {
         fontSize: 10,
-        color: '#9CA3AF',
+        color: '#64748B',
         fontWeight: '600',
         textTransform: 'uppercase',
     },
     settingsBtn: {
         padding: 8,
-        backgroundColor: '#F9FAFB',
+        backgroundColor: '#1E293B',
         borderRadius: 10,
     },
     accountList: {
-        backgroundColor: '#F9FAFB',
+        backgroundColor: '#0F172A',
         borderTopWidth: 1,
-        borderTopColor: '#F3F4F6',
+        borderTopColor: '#1E293B',
     },
     accountItem: {
         flexDirection: 'row',
@@ -633,7 +660,7 @@ const styles = StyleSheet.create({
         padding: 16,
         paddingLeft: 20,
         borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
+        borderBottomColor: '#1E293B',
     },
     accountInfo: {
         flex: 1,
@@ -641,17 +668,17 @@ const styles = StyleSheet.create({
     accountItemName: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#374151',
+        color: '#E2E8F0',
     },
     accountItemType: {
         fontSize: 12,
-        color: '#9CA3AF',
+        color: '#64748B',
         marginTop: 2,
     },
     accountItemBalance: {
         fontSize: 15,
         fontWeight: '700',
-        color: '#1A1A1A',
+        color: '#F1F5F9',
     },
     addSection: {
         marginTop: 20,
